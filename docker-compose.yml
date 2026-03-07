@@ -1,0 +1,47 @@
+version: '3.8'
+
+services:
+  mongo:
+    image: mongo:7.0
+    container_name: f1cms-mongo
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+    networks:
+      - f1cms-network
+
+  backend:
+    build: ./backend
+    container_name: f1cms-backend
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    environment:
+      - NODE_ENV=production
+      - PORT=5000
+      - MONGO_URI=mongodb://mongo:27017/f1cms
+      - JWT_SECRET=your_super_secret_jwt_key_change_this_in_production
+    depends_on:
+      - mongo
+    networks:
+      - f1cms-network
+
+  frontend:
+    build: ./frontend
+    container_name: f1cms-frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    networks:
+      - f1cms-network
+
+volumes:
+  mongo-data:
+
+networks:
+  f1cms-network:
+    driver: bridge

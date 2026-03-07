@@ -1,0 +1,104 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-dark-900 text-gray-100;
+  }
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: #1a1a1a;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #E10600;
+  border-radius: 5px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #b00500;
+}
+
+/* Glassmorphism effect */
+.glass {
+  background: rgba(26, 26, 26, 0.7);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Custom Leaflet Marker Styles */
+.custom-f1-marker {
+  background: transparent !important;
+  border: none !important;
+}
+
+/* Track SVG Container */
+.track-svg-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.track-svg-container svg {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.track-svg-container .rotation-group {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+/* Ensure SVG paths are visible */
+.track-svg-container svg path {
+  vector-effect: non-scaling-stroke;
+}
+
+/* Custom Leaflet Popup Styles */
+.leaflet-popup-content-wrapper {
+  background: rgba(26, 26, 26, 0.95) !important;
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(225, 6, 0, 0.5) !important;
+  border-radius: 12px !important;
+  box-shadow: 0 0 30px rgba(225, 6, 0, 0.3) !important;
+  padding: 0 !important;
+}
+
+.leaflet-popup-content {
+  margin: 0 !important;
+  color: white !important;
+}
+
+.leaflet-popup-tip {
+  background: rgba(26, 26, 26, 0.95) !important;
+  border: 1px solid rgba(225, 6, 0, 0.5) !important;
+}
+
+.leaflet-popup-close-button {
+  color: #E10600 !important;
+  font-size: 24px !important;
+  padding: 4px 8px !important;
+}
+
+.leaflet-popup-close-button:hover {
+  color: #ff0000 !important;
+}
+
+/* Pulse animation for markers */
+@keyframes ping {
+  75%, 100% {
+    transform: scale(2);
+    opacity: 0;
+  }
+}
+
+.animate-ping {
+  animation: ping 2s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
