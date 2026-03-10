@@ -21,71 +21,89 @@ const createF1Icon = () => {
   });
 };
 
-// Fallback minimal track placeholder
-const fallbackTrackPath = 'M25,50 Q35,25 55,30 T85,50 Q80,75 50,80 T25,50';
-
 const CircuitMarker = ({ race, onMarkerClick, isActive }) => {
-  const svgRef = useRef(null);
-  const pathRef = useRef(null);
-  const rotationRef = useRef(null);
+  const trackWrapperRef = useRef(null);
   const timelineRef = useRef(null);
 
   useEffect(() => {
-    // Animate track when popup is open
-    if (isActive && pathRef.current && svgRef.current) {
-      const path = pathRef.current;
-      const svg = svgRef.current;
-      
-      // Get the group element for rotation
-      const rotationGroup = svg.querySelector('.rotation-group');
-      
-      if (!rotationGroup) return;
+    if (!isActive || !trackWrapperRef.current || !race.trackSvg) return;
 
-      const length = path.getTotalLength();
-      
-      // Create timeline
-      const tl = gsap.timeline();
-      
-      // Initial setup
-      gsap.set(path, {
-        strokeDasharray: length,
-        strokeDashoffset: length,
-      });
+    // Wait for SVG to be rendered in DOM
+    const timer = setTimeout(() => {
+      const wrapper = trackWrapperRef.current;
+      if (!wrapper) return;
 
-      gsap.set(rotationGroup, {
-        transformOrigin: '50% 50%',
-      });
+      const svg = wrapper.querySelector('svg');
+      if (!svg) return;
 
-      // Fade in
-      tl.from(svg, {
-        opacity: 0,
-        scale: 0.8,
-        duration: 0.3,
-        ease: 'power2.out',
-      })
-      // Draw animation
-      .to(path, {
-        strokeDashoffset: 0,
-        duration: 1.5,
-        ease: 'power2.inOut',
-      }, '-=0.1')
-      // Subtle rotation
-      .to(rotationGroup, {
-        rotation: 360,
-        duration: 20,
-        ease: 'none',
-        repeat: -1,
-      }, '-=0.5');
+      // Ensure SVG has proper transform origin
+      svg.style.transformBox = 'fill-box';
+      svg.style.transformOrigin = 'center';
 
-      timelineRef.current = tl;
+      // Find the first path element
+      const path = svg.querySelector('path');
+      if (!path) return;
 
-      return () => {
-        if (timelineRef.current) {
-          timelineRef.current.kill();
-        }
-      };
-    }
-  }, [isActive]);
+      // Apply glow effect to the path
+      path.style.filter = 'drop-shadow(0 0 6px #E10600)';
+
+      // Kill any existing timeline
+      if (timelineRef.current) {
+        timelineRef.current.kill();
+      }
+
+      try {
+        const length = path.getTotalLength();
+
+        // Set up the stroke dash for animation
+        gsap.set(path, {
+          strokeDasharray: length,
+          strokeDashoffset: length,
+        });
+
+        // Create animation timeline
+        const tl = gsap.timeline();
+        timelineRef.current = tl;
+
+        // Animate stroke dash offset with yoyo for smooth forward/reverse
+        tl.to(path, {
+          strokeDashoffset: 0,
+          duration: 3,
+          ease: 'power2.inOut',
+          repeat: -1,
+          yoyo: true,
+        });
+
+        // Add rotation to the entire SVG
+        tl.to(svg, {
+          rotation: 360,
+          duration: 30,
+          ease: 'linear',
+          repeat: -1,
+          transformOrigin: '50% 50%',
+        }, 0); // Start rotation from the beginning
+
+        // Add subtle floating animation to the wrapper
+        gsap.to(wrapper, {
+          y: -6,
+          duration: 3,
+          repeat: -1,
+          yoyo: true,
+          ease: 'sine.inOut',
+        });
+
+      } catch (e) {
+        console.warn('Could not animate track:', e);
+      }
+    }, 150);
+
+    return () => {
+      clearTimeout(timer);
+      if (timelineRef.current) {
+        timelineRef.current.kill();
+      }
+    };
+  }, [isActive, race.trackSvg]);
 
   const position = [race.latitude || 0, race.longitude || 0];
   
@@ -93,9 +111,6 @@ const CircuitMarker = ({ race, onMarkerClick, isActive }) => {
   if (!race.latitude || !race.longitude) {
     return null;
   }
-
-  // Determine which track path to use
-  const hasCustomTrack = !!race.trackSvg;
 
   return (
     <Marker
@@ -105,8 +120,8 @@ const CircuitMarker = ({ race, onMarkerClick, isActive }) => {
         click: () => onMarkerClick?.(race),
       }}
     >
-      <Popup className="custom-popup" maxWidth={320}>
-        <div className="bg-dark-900 text-white p-4 rounded-lg min-w-[280px]">
+      <Popup className="custom-popup" maxWidth={360} minWidth={320}>
+        <div className="bg-dark-900 text-white p-4 rounded-lg">
           <div className="flex items-start justify-between mb-3">
             <div>
               <h3 className="font-bold text-lg mb-1">{race.name}</h3>
@@ -118,60 +133,53 @@ const CircuitMarker = ({ race, onMarkerClick, isActive }) => {
           </div>
 
           {/* Track Layout SVG */}
-          <div className="mb-3 bg-dark-800 rounded-lg p-4 relative overflow-hidden flex items-center justify-center" style={{ minHeight: '120px' }}>
-            {hasCustomTrack ? (
+          <div 
+            className="mb-3 bg-dark-800 rounded-lg p-4 flex items-center justify-center" 
+            style={{ height: '140px', width: '100%', overflow: 'visible' }}
+          >
+            {race.trackSvg ? (
               <div
-                className="w-full flex items-center justify-center"
-                style={{ 
-                  filter: 'drop-shadow(0 0 10px rgba(225, 6, 0, 0.6))',
+                ref={trackWrapperRef}
+                className="track-wrapper"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  height: '100%',
+                  width: '100%',
+                  overflow: 'visible',
                 }}
               >
-                <div 
-                  ref={svgRef}
-                  className="track-svg-container"
-                  dangerouslySetInnerHTML={{ 
-                    __html: wrapSvgWithRotationGroup(race.trackSvg) 
-                  }}
+                <div
+                  className="track-svg"
                   style={{
-                    maxWidth: '100%',
-                    maxHeight: '100px',
+                    width: '100%',
+                    height: '100%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
                   }}
+                  dangerouslySetInnerHTML={{ __html: race.trackSvg }}
                 />
               </div>
             ) : (
-              <svg
-                ref={svgRef}
-                viewBox="0 0 100 100"
-                width="100%"
-                height="100"
-                preserveAspectRatio="xMidYMid meet"
-                style={{ 
-                  filter: 'drop-shadow(0 0 10px rgba(225, 6, 0, 0.6))',
-                  maxWidth: '200px',
-                }}
-              >
-                <g className="rotation-group">
-                  <path
-                    ref={pathRef}
-                    d={fallbackTrackPath}
-                    fill="none"
-                    stroke="#E10600"
-                    strokeWidth="3"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </g>
-              </svg>
+              <div className="text-center text-gray-500 text-sm">
+                <div className="mb-2">🏁</div>
+                <div>Track layout not available</div>
+              </div>
             )}
-            <div className="absolute top-2 right-2 text-xs text-gray-500 font-mono">
-              {race.circuitCity || 'Circuit'}
-            </div>
           </div>
 
           <div className="flex items-center justify-between text-xs text-gray-400 mb-2">
             <span>{new Date(race.date).toLocaleDateString()}</span>
             <span className="text-f1red font-semibold">Season {race.season?.year}</span>
           </div>
+
+          {race.circuitCity && race.circuitCountry && (
+            <div className="text-xs text-gray-500 mb-2">
+              {race.circuitCity}, {race.circuitCountry}
+            </div>
+          )}
 
           {race.results && race.results.length > 0 && (
             <div className="pt-2 border-t border-gray-700">
@@ -182,53 +190,6 @@ const CircuitMarker = ({ race, onMarkerClick, isActive }) => {
       </Popup>
     </Marker>
   );
-};
-
-// Helper function to wrap custom SVG with rotation group
-const wrapSvgWithRotationGroup = (svgString) => {
-  if (!svgString) return '';
-  
-  // If it's a full SVG element, extract and wrap the content
-  if (svgString.trim().startsWith('<svg')) {
-    // Parse the SVG to extract viewBox and paths
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(svgString, 'image/svg+xml');
-    const svgElement = doc.querySelector('svg');
-    
-    if (!svgElement) return svgString;
-    
-    const viewBox = svgElement.getAttribute('viewBox') || '0 0 100 100';
-    const innerHTML = svgElement.innerHTML;
-    
-    return `
-      <svg 
-        viewBox="${viewBox}" 
-        width="100%" 
-        height="100" 
-        preserveAspectRatio="xMidYMid meet"
-        style="max-width: 200px;"
-      >
-        <g class="rotation-group">
-          ${innerHTML}
-        </g>
-      </svg>
-    `;
-  }
-  
-  // If it's just a path or paths, wrap it
-  return `
-    <svg 
-      viewBox="0 0 100 100" 
-      width="100%" 
-      height="100" 
-      preserveAspectRatio="xMidYMid meet"
-      style="max-width: 200px;"
-    >
-      <g class="rotation-group">
-        ${svgString}
-      </g>
-    </svg>
-  `;
 };
 
 // Helper function to get country flag emoji

@@ -1,6 +1,7 @@
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { AuthProvider } from './context/AuthContext';
+import { useState, useEffect } from 'react';
 import Layout from './layouts/Layout';
 import Home from './pages/Home';
 import PostDetail from './pages/PostDetail';
@@ -19,6 +20,126 @@ import EditRaceResults from './pages/EditRaceResults';
 import CircuitsMap from './pages/CircuitsMap';
 import PrivateRoute from './components/PrivateRoute';
 import AdminRoute from './components/AdminRoute';
+import LoadingScreen from './components/LoadingScreen';
+
+function AppContent() {
+  const location = useLocation();
+  const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    // Show loading screen on route change
+    setIsLoading(true);
+    
+    // Hide loading screen after a brief delay
+    const timer = setTimeout(() => {
+      setIsLoading(false);
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [location.pathname]);
+
+  return (
+    <>
+      <LoadingScreen isLoading={isLoading} />
+      <Routes>
+        <Route path="/" element={<Layout />}>
+          <Route index element={<Home />} />
+          <Route path="posts/:id" element={<PostDetail />} />
+          <Route path="login" element={<Login />} />
+          
+          {/* Blog Management */}
+          <Route
+            path="dashboard"
+            element={
+              <PrivateRoute>
+                <AdminRoute>
+                  <Dashboard />
+                </AdminRoute>
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="create-post"
+            element={
+              <PrivateRoute>
+                <AdminRoute>
+                  <CreatePost />
+                </AdminRoute>
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="edit-post/:id"
+            element={
+              <PrivateRoute>
+                <AdminRoute>
+                  <EditPost />
+                </AdminRoute>
+              </PrivateRoute>
+            }
+          />
+
+          {/* Championship Management */}
+          <Route path="championship" element={<ChampionshipDashboard />} />
+          <Route path="standings/drivers" element={<DriverStandings />} />
+          <Route path="standings/constructors" element={<ConstructorStandings />} />
+          <Route path="circuits-map" element={<CircuitsMap />} />
+          <Route path="circuits" element={<CircuitsMap />} />
+          <Route
+            path="manage/drivers"
+            element={
+              <PrivateRoute>
+                <AdminRoute>
+                  <ManageDrivers />
+                </AdminRoute>
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="manage/constructors"
+            element={
+              <PrivateRoute>
+                <AdminRoute>
+                  <ManageConstructors />
+                </AdminRoute>
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="manage/races"
+            element={
+              <PrivateRoute>
+                <AdminRoute>
+                  <ManageRaces />
+                </AdminRoute>
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="edit-race/:id"
+            element={
+              <PrivateRoute>
+                <AdminRoute>
+                  <EditRace />
+                </AdminRoute>
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="edit-race-results/:id"
+            element={
+              <PrivateRoute>
+                <AdminRoute>
+                  <EditRaceResults />
+                </AdminRoute>
+              </PrivateRoute>
+            }
+          />
+        </Route>
+      </Routes>
+    </>
+  );
+}
 
 function App() {
   return (
@@ -35,101 +156,7 @@ function App() {
             },
           }}
         />
-        <Routes>
-          <Route path="/" element={<Layout />}>
-            <Route index element={<Home />} />
-            <Route path="posts/:id" element={<PostDetail />} />
-            <Route path="login" element={<Login />} />
-            
-            {/* Blog Management */}
-            <Route
-              path="dashboard"
-              element={
-                <PrivateRoute>
-                  <AdminRoute>
-                    <Dashboard />
-                  </AdminRoute>
-                </PrivateRoute>
-              }
-            />
-            <Route
-              path="create-post"
-              element={
-                <PrivateRoute>
-                  <AdminRoute>
-                    <CreatePost />
-                  </AdminRoute>
-                </PrivateRoute>
-              }
-            />
-            <Route
-              path="edit-post/:id"
-              element={
-                <PrivateRoute>
-                  <AdminRoute>
-                    <EditPost />
-                  </AdminRoute>
-                </PrivateRoute>
-              }
-            />
-
-            {/* Championship Management */}
-            <Route path="championship" element={<ChampionshipDashboard />} />
-            <Route path="standings/drivers" element={<DriverStandings />} />
-            <Route path="standings/constructors" element={<ConstructorStandings />} />
-            <Route path="circuits" element={<CircuitsMap />} />
-            <Route
-              path="manage/drivers"
-              element={
-                <PrivateRoute>
-                  <AdminRoute>
-                    <ManageDrivers />
-                  </AdminRoute>
-                </PrivateRoute>
-              }
-            />
-            <Route
-              path="manage/constructors"
-              element={
-                <PrivateRoute>
-                  <AdminRoute>
-                    <ManageConstructors />
-                  </AdminRoute>
-                </PrivateRoute>
-              }
-            />
-            <Route
-              path="manage/races"
-              element={
-                <PrivateRoute>
-                  <AdminRoute>
-                    <ManageRaces />
-                  </AdminRoute>
-                </PrivateRoute>
-              }
-            />
-            <Route
-              path="edit-race/:id"
-              element={
-                <PrivateRoute>
-                  <AdminRoute>
-                    <EditRace />
-                  </AdminRoute>
-                </PrivateRoute>
-              }
-            />
-            <Route
-              path="edit-race-results/:id"
-              element={
-                <PrivateRoute>
-                  <AdminRoute>
-                    <EditRaceResults />
-                  </AdminRoute>
-                </PrivateRoute>
-              }
-            />
-          </Route>
-        </Routes>
+        <AppContent />
       </Router>
     </AuthProvider>
   );
