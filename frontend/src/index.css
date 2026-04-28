@@ -5,6 +5,13 @@
 @layer base {
   body {
     @apply bg-dark-900 text-gray-100;
+    font-family: 'Titillium Web', sans-serif;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-weight: 700;
+    letter-spacing: 0.02em;
   }
 }
 
@@ -138,42 +145,15 @@ button, a, .glass {
   box-shadow: 0 12px 24px rgba(225, 6, 0, 0.2);
 }
 
-/* Button hover effects */
-button:hover {
-  transform: scale(1.02);
-}
-
-button:active {
-  transform: scale(0.98);
-}
-
-/* Link underline animation */
-a {
-  position: relative;
-}
-
-a::after {
-  content: '';
-  position: absolute;
-  width: 0;
-  height: 2px;
-  bottom: -2px;
-  left: 0;
-  background-color: #E10600;
-  transition: width 0.3s ease;
-}
-
-a:hover::after {
-  width: 100%;
+/* Legend stats card — uses accent color CSS var instead of hardcoded red */
+.glass-legend:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 24px var(--legend-accent-shadow, rgba(225, 6, 0, 0.2));
 }
 
 /* Smooth image transitions */
 img {
   transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-img:hover {
-  transform: scale(1.05);
 }
 
 /* Page transition */

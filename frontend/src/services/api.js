@@ -16,7 +16,17 @@ api.interceptors.request.use(
     }
     return config;
   },
+  (error) => Promise.reject(error)
+);
+
+// Auto-logout on 401 (expired/invalid token)
+api.interceptors.response.use(
+  (response) => response,
   (error) => {
+    if (error.response?.status === 401) {
+      localStorage.removeItem('userInfo');
+      window.location.href = '/login';
+    }
     return Promise.reject(error);
   }
 );
@@ -62,5 +72,9 @@ export const updateRaceResults = (raceId, results) => api.put(`/races/${raceId}/
 // Standings API
 export const getDriverStandings = (seasonYear) => api.get(`/standings/drivers/${seasonYear}`);
 export const getConstructorStandings = (seasonYear) => api.get(`/standings/constructors/${seasonYear}`);
+
+// Legends image overrides API
+export const getLegendImages = () => api.get('/legends');
+export const updateLegendImages = (legendId, data) => api.put(`/legends/${legendId}`, data);
 
 export default api;

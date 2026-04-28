@@ -25,6 +25,7 @@ app.use('/api/constructors', require('./routes/constructorRoutes'));
 app.use('/api/seasons', require('./routes/seasonRoutes'));
 app.use('/api/races', require('./routes/raceRoutes'));
 app.use('/api/standings', require('./routes/standingsRoutes'));
+app.use('/api/legends',  require('./routes/legendRoutes'));
 
 // Health check
 app.get('/', (req, res) => {

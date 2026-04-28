@@ -14,6 +14,10 @@ export default {
           700: '#1a1a1a',
         },
       },
+      fontFamily: {
+        f1: ['Titillium Web', 'sans-serif'],
+        f1heading: ['Barlow Condensed', 'sans-serif'],
+      },
     },
   },
   plugins: [],

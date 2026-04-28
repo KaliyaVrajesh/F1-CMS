@@ -18,6 +18,7 @@ import ManageRaces from './pages/ManageRaces';
 import EditRace from './pages/EditRace';
 import EditRaceResults from './pages/EditRaceResults';
 import CircuitsMap from './pages/CircuitsMap';
+import Legends from './pages/Legends';
 import PrivateRoute from './components/PrivateRoute';
 import AdminRoute from './components/AdminRoute';
 import LoadingScreen from './components/LoadingScreen';
@@ -85,6 +86,7 @@ function AppContent() {
           <Route path="standings/constructors" element={<ConstructorStandings />} />
           <Route path="circuits-map" element={<CircuitsMap />} />
           <Route path="circuits" element={<CircuitsMap />} />
+          <Route path="legends" element={<Legends />} />
           <Route
             path="manage/drivers"
             element={
