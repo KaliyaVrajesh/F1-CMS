@@ -2,7 +2,7 @@ import { Outlet, useLocation } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 
 // Pages that need full-screen treatment (no container padding)
-const FULLSCREEN_ROUTES = ['/legends'];
+const FULLSCREEN_ROUTES = ['/legends', '/'];
 
 const Layout = () => {
   const { pathname } = useLocation();

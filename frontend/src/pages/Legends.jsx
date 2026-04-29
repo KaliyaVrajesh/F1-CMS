@@ -106,51 +106,95 @@ const DEFAULT_LEGENDS = [
 ];
 
 // ─── Two-face 3D flip card ────────────────────────────────────────────────────
-// Tilting left (rotateY < -6) shows image2, tilting right shows image1
-const TiltCard = ({ legend }) => {
-  const wrapRef = useRef(null);   // perspective wrapper
-  const cardRef = useRef(null);   // the card that tilts
-  const front = useRef(null);     // front face img
-  const back = useRef(null);      // back face img
+// Card stays mounted. On legend change, GSAP spins it 360° on Y axis.
+// At the 90° midpoint (invisible edge) the image swaps — looks like a real card flip.
+const TiltCard = ({ legend, spinTrigger, direction }) => {
+  const wrapRef  = useRef(null);
+  const cardRef  = useRef(null);
+  const front    = useRef(null);
+  const back     = useRef(null);
   const shineRef = useRef(null);
-  const glowRef = useRef(null);
-  const rafRef = useRef(null);
-  const rotYRef = useRef(0);
+  const glowRef  = useRef(null);
+  const rafRef   = useRef(null);
+  // Track current displayed legend inside the card (lags behind by half a spin)
+  const displayedLegend = useRef(legend);
+  const [cardLegend, setCardLegend] = useState(legend);
+  const isSpinning = useRef(false);
 
+  // ── Spin animation on legend change ──────────────────────────────────────
+  useEffect(() => {
+    if (!cardRef.current) return;
+    if (isSpinning.current) return;
+    isSpinning.current = true;
+
+    const spinDir = direction > 0 ? 1 : -1;
+
+    // Use a proxy object so we can drive rotateY through 0→90→180
+    // and swap the image exactly at 90° (the invisible edge)
+    const proxy = { rotY: 0 };
+    let swapped = false;
+
+    gsap.to(proxy, {
+      rotY: 180,
+      duration: 0.75,
+      ease: 'power1.inOut',
+      onUpdate() {
+        const r = proxy.rotY * spinDir;
+        // Perspective-correct scaleX: cos(angle) gives natural card-edge thinning
+        const rad = (proxy.rotY * Math.PI) / 180;
+        const sx = Math.abs(Math.cos(rad));
+        gsap.set(cardRef.current, { rotateY: r, scaleX: sx });
+
+        // Swap at the midpoint (90°) — card is edge-on, invisible
+        if (!swapped && proxy.rotY >= 90) {
+          swapped = true;
+          setCardLegend({ ...legend });
+          gsap.set(front.current,  { opacity: 1 });
+          gsap.set(back.current,   { opacity: 0 });
+          if (shineRef.current) shineRef.current.style.background = 'none';
+        }
+      },
+      onComplete() {
+        // Snap back to clean zero
+        gsap.set(cardRef.current, { rotateY: 0, scaleX: 1 });
+        isSpinning.current = false;
+      },
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [spinTrigger]);
+
+  // ── Mouse tilt interaction ────────────────────────────────────────────────
   useEffect(() => {
     const card = cardRef.current;
     if (!card) return;
 
     const onMove = (e) => {
+      if (isSpinning.current) return;
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
       rafRef.current = requestAnimationFrame(() => {
         const rect = card.getBoundingClientRect();
         const dx = (e.clientX - rect.left - rect.width / 2) / (rect.width / 2);
         const dy = (e.clientY - rect.top - rect.height / 2) / (rect.height / 2);
-        const rotY = dx * 38;   // wider range so flip is reachable
+        const rotY = dx * 38;
         const rotX = -dy * 14;
-        rotYRef.current = rotY;
 
         gsap.to(card, { rotateX: rotX, rotateY: rotY, duration: 0.3, ease: 'power2.out' });
 
-        // Cross-fade faces based on tilt direction
         const showBack = rotY < -8;
         gsap.to(front.current, { opacity: showBack ? 0 : 1, duration: 0.25 });
         gsap.to(back.current,  { opacity: showBack ? 1 : 0, duration: 0.25 });
 
-        // Shine
         const sx = ((e.clientX - rect.left) / rect.width) * 100;
         const sy = ((e.clientY - rect.top) / rect.height) * 100;
         if (shineRef.current)
           shineRef.current.style.background = `radial-gradient(circle at ${sx}% ${sy}%, rgba(255,255,255,0.13) 0%, transparent 55%)`;
-
-        // Glow
         if (glowRef.current)
           gsap.to(glowRef.current, { x: e.clientX - rect.left - 150, y: e.clientY - rect.top - 150, duration: 0.5, ease: 'power2.out' });
       });
     };
 
     const onLeave = () => {
+      if (isSpinning.current) return;
       gsap.to(card, { rotateX: 0, rotateY: 0, duration: 0.9, ease: 'elastic.out(1,0.5)' });
       gsap.to(front.current, { opacity: 1, duration: 0.4 });
       gsap.to(back.current,  { opacity: 0, duration: 0.4 });
@@ -164,77 +208,71 @@ const TiltCard = ({ legend }) => {
       card.removeEventListener('mouseleave', onLeave);
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
     };
-  }, [legend.id]);
+  }, []);
+
+  const cl = cardLegend;
 
   return (
     <div ref={wrapRef} style={{ perspective: '900px' }} className="flex justify-center">
-      <motion.div
+      <div
         ref={cardRef}
-        key={legend.id}
-        initial={{ opacity: 0, y: 50, rotateY: -20 }}
-        animate={{ opacity: 1, y: 0, rotateY: 0 }}
-        exit={{ opacity: 0, y: -50, rotateY: 20 }}
-        transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
         className="relative w-72 md:w-80 rounded-2xl overflow-hidden cursor-pointer select-none"
         style={{
           transformStyle: 'preserve-3d',
-          boxShadow: `0 30px 80px rgba(0,0,0,0.8), 0 0 50px ${legend.accent}44`,
-          border: `1px solid ${legend.accent}55`,
+          boxShadow: `0 30px 80px rgba(0,0,0,0.8), 0 0 50px ${cl.accent}44`,
+          border: `1px solid ${cl.accent}55`,
           height: '480px',
+          willChange: 'transform',
         }}
       >
         {/* Glow blob */}
         <div ref={glowRef} className="absolute w-72 h-72 rounded-full pointer-events-none"
-          style={{ background: `radial-gradient(circle, ${legend.accent}35 0%, transparent 70%)`, filter: 'blur(28px)', zIndex: 1 }} />
+          style={{ background: `radial-gradient(circle, ${cl.accent}35 0%, transparent 70%)`, filter: 'blur(28px)', zIndex: 1 }} />
 
         {/* FRONT face */}
         <div ref={front} className="absolute inset-0">
-          <img src={legend.image} alt={legend.name}
-            className="w-full h-full object-cover object-top scale-110"
-            style={{ willChange: 'transform' }} />
+          <img src={cl.image} alt={cl.name}
+            className="w-full h-full object-cover object-top scale-110" />
           <div className="absolute inset-0"
-            style={{ background: `linear-gradient(to top, ${legend.bg}ff 0%, ${legend.bg}88 40%, transparent 100%)` }} />
+            style={{ background: `linear-gradient(to top, ${cl.bg}ff 0%, ${cl.bg}88 40%, transparent 100%)` }} />
         </div>
 
         {/* BACK face */}
         <div ref={back} className="absolute inset-0" style={{ opacity: 0 }}>
-          <img src={legend.image2 || legend.image} alt={`${legend.name} alt`}
-            className="w-full h-full object-cover object-top scale-110"
-            style={{ willChange: 'transform' }} />
+          <img src={cl.image2 || cl.image} alt={`${cl.name} alt`}
+            className="w-full h-full object-cover object-top scale-110" />
           <div className="absolute inset-0"
-            style={{ background: `linear-gradient(to top, ${legend.bg}ff 0%, ${legend.bg}88 40%, transparent 100%)` }} />
-          {/* "flip" label */}
+            style={{ background: `linear-gradient(to top, ${cl.bg}ff 0%, ${cl.bg}88 40%, transparent 100%)` }} />
           <div className="absolute top-3 right-3 px-2 py-0.5 rounded-full text-xs font-bold z-10"
-            style={{ background: `${legend.accent}33`, color: legend.accent, border: `1px solid ${legend.accent}55` }}>
+            style={{ background: `${cl.accent}33`, color: cl.accent, border: `1px solid ${cl.accent}55` }}>
             ← flip
           </div>
         </div>
 
-        {/* Shine overlay */}
+        {/* Shine */}
         <div ref={shineRef} className="absolute inset-0 pointer-events-none" style={{ zIndex: 3 }} />
 
         {/* Bottom info */}
         <div className="absolute bottom-0 left-0 right-0 p-5 z-10">
           <div className="flex items-end justify-between">
             <div>
-              <p className="text-xs font-bold tracking-[0.25em] uppercase mb-1" style={{ color: legend.accent }}>{legend.nationality}</p>
-              <h2 className="font-f1heading font-black text-3xl text-white leading-none">{legend.name}</h2>
-              <p className="text-gray-400 text-sm mt-1">{legend.years}</p>
+              <p className="text-xs font-bold tracking-[0.25em] uppercase mb-1" style={{ color: cl.accent }}>{cl.nationality}</p>
+              <h2 className="font-f1heading font-black text-3xl text-white leading-none">{cl.name}</h2>
+              <p className="text-gray-400 text-sm mt-1">{cl.years}</p>
             </div>
-            <div className="text-6xl font-f1heading font-black leading-none opacity-15" style={{ color: legend.accent }}>{legend.number}</div>
+            <div className="text-6xl font-f1heading font-black leading-none opacity-15" style={{ color: cl.accent }}>{cl.number}</div>
           </div>
           <div className="flex gap-2 mt-3 flex-wrap">
-            {[{ l: '🏆', v: `${legend.titles}× WDC` }, { l: '🏁', v: `${legend.wins} Wins` }, { l: '⚡', v: `${legend.poles} Poles` }].map(s => (
+            {[{ l: '🏆', v: `${cl.titles}× WDC` }, { l: '🏁', v: `${cl.wins} Wins` }, { l: '⚡', v: `${cl.poles} Poles` }].map(s => (
               <span key={s.l} className="px-2 py-0.5 rounded-full text-xs font-bold"
-                style={{ background: `${legend.accent}22`, color: legend.accent, border: `1px solid ${legend.accent}44` }}>
+                style={{ background: `${cl.accent}22`, color: cl.accent, border: `1px solid ${cl.accent}44` }}>
                 {s.l} {s.v}
               </span>
             ))}
           </div>
-          {/* Flip hint */}
-          <p className="text-xs mt-2 opacity-40" style={{ color: legend.accent }}>← tilt left to flip card</p>
+          <p className="text-xs mt-2 opacity-40" style={{ color: cl.accent }}>← tilt left to flip card</p>
         </div>
-      </motion.div>
+      </div>
     </div>
   );
 };
@@ -306,6 +344,7 @@ const Legends = () => {
   const [direction, setDirection] = useState(1);
   const [transitioning, setTransitioning] = useState(false);
   const [editingIdx, setEditingIdx] = useState(null);
+  const [spinTrigger, setSpinTrigger] = useState(0); // increment to fire spin
   const bgRef = useRef(null);
   const lastWheelTime = useRef(0);
   const touchStartY = useRef(0);
@@ -332,18 +371,23 @@ const Legends = () => {
       .catch(() => {}); // silently fall back to defaults
   }, []);
 
-  useEffect(() => {
-    if (bgRef.current)
-      gsap.to(bgRef.current, { backgroundColor: legend.bg, duration: 0.9, ease: 'power2.inOut' });
-  }, [current, legend.bg]);
-
   const goTo = useCallback((next) => {
     if (transitioning || next < 0 || next >= legends.length) return;
     setTransitioning(true);
-    setDirection(next > current ? 1 : -1);
+    const d = next > current ? 1 : -1;
+    setDirection(d);
     setCurrent(next);
-    setTimeout(() => setTransitioning(false), 750);
-  }, [current, transitioning, legends.length]);
+    setSpinTrigger(t => t + 1);
+    // Colour transition synced to spin duration (0.75s)
+    if (bgRef.current) {
+      gsap.to(bgRef.current, {
+        backgroundColor: legends[next].bg,
+        duration: 0.75,
+        ease: 'power1.inOut',
+      });
+    }
+    setTimeout(() => setTransitioning(false), 800);
+  }, [current, transitioning, legends]);
 
   useEffect(() => {
     const onWheel = (e) => {
@@ -427,12 +471,9 @@ const Legends = () => {
           {/* Content */}
           <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-8 px-8 pb-4 items-center overflow-hidden">
 
-            {/* Card */}
+            {/* Card — stays mounted, spins on legend change */}
             <div className="relative">
-              <AnimatePresence mode="wait" custom={direction}>
-                <TiltCard key={legend.id} legend={legend} />
-              </AnimatePresence>
-              {/* Admin edit button */}
+              <TiltCard legend={legend} spinTrigger={spinTrigger} direction={direction} />
               {isAdmin && isAdmin() && (
                 <button onClick={() => setEditingIdx(current)}
                   className="absolute top-2 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full text-xs font-bold z-20 transition"
