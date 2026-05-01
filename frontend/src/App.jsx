@@ -19,6 +19,8 @@ import EditRace from './pages/EditRace';
 import EditRaceResults from './pages/EditRaceResults';
 import CircuitsMap from './pages/CircuitsMap';
 import Legends from './pages/Legends';
+import LiquidHero from './pages/LiquidHero';
+import LiquidHeroConfigurable from './pages/LiquidHeroConfigurable';
 import PrivateRoute from './components/PrivateRoute';
 import AdminRoute from './components/AdminRoute';
 import LoadingScreen from './components/LoadingScreen';
@@ -43,6 +45,10 @@ function AppContent() {
     <>
       <LoadingScreen isLoading={isLoading} />
       <Routes>
+        {/* Liquid Hero - Full screen, no layout */}
+        <Route path="/liquid-hero" element={<LiquidHero />} />
+        <Route path="/liquid-hero-config" element={<LiquidHeroConfigurable />} />
+        
         <Route path="/" element={<Layout />}>
           <Route index element={<Home />} />
           <Route path="posts/:id" element={<PostDetail />} />
