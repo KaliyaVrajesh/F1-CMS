@@ -32,12 +32,16 @@ const registerUser = asyncHandler(async (req, res) => {
     throw new Error('User already exists');
   }
 
-  // Create user
+  // Create user — role can only be set if no admin exists yet (first-time setup)
+  // After that, all registrations default to 'user'
+  const adminExists = await User.findOne({ role: 'admin' });
+  const assignedRole = (!adminExists && role === 'admin') ? 'admin' : 'user';
+
   const user = await User.create({
     name,
     email,
     password,
-    role: role || 'user',
+    role: assignedRole,
   });
 
   if (user) {
