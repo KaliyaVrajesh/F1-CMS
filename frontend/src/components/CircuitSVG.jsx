@@ -10,15 +10,15 @@ const CIRCUIT_FILE_MAP = [
   { keys: ['baku', 'azerbaijan'],                               file: 'baku'              },
   { keys: ['catalunya', 'barcelona', 'spain'],                  file: 'Catalunya'         },
   { keys: ['gilles villeneuve', 'canada', 'montreal'],          file: 'GillesVilleneuve'  },
-  { keys: ['hermanos rodriguez', 'mexico'],                     file: 'HermanosRodriguez' },
+  { keys: ['hermanos rodriguez', 'mexico', 'mexico city', 'autodromo hermanos', 'gran premio de mexico'], file: 'HermanosRodriguez' },
   { keys: ['hockenheim', 'germany'],                            file: 'Hockenheim'        },
   { keys: ['hungaroring', 'hungary', 'budapest'],               file: 'hungaroring'       },
   { keys: ['imola', 'enzo', 'dino', 'emilia'],                  file: 'Imola'             },
-  { keys: ['interlagos', 'brazil', 'são paulo', 'sao paulo'],   file: 'Interlagos'        },
+  { keys: ['interlagos', 'brazil', 'são paulo', 'sao paulo', 'brasil', 'grand prix of brazil', 'autodromo jose carlos pace'], file: 'Interlagos' },
   { keys: ['istanbul', 'turkey'],                               file: 'Istanbul'          },
   { keys: ['jeddah', 'saudi'],                                  file: 'Jeddah'            },
   { keys: ['kyalami', 'south africa'],                          file: 'Kyalami'           },
-  { keys: ['las vegas', 'lasvegas'],                            file: 'LasVegas'          },
+  { keys: ['las vegas', 'lasvegas', 'las vegas street', 'nevada'], file: 'LasVegas'       },
   { keys: ['lusail', 'qatar'],                                  file: 'Lusail'            },
   { keys: ['marina bay', 'singapore'],                          file: 'marinabay'         },
   { keys: ['miami'],                                            file: 'Miami'             },
@@ -30,7 +30,7 @@ const CIRCUIT_FILE_MAP = [
   { keys: ['portimao', 'portimão', 'algarve', 'portugal'],      file: 'Portimao'          },
   { keys: ['sepang', 'malaysia', 'kuala lumpur'],               file: 'Sepang'            },
   { keys: ['shanghai', 'china'],                                file: 'Shanghai'          },
-  { keys: ['silverstone', 'british', 'uk'],                     file: 'silverstone'       },
+  { keys: ['silverstone', 'british grand prix', 'british gp'],  file: 'silverstone'       },
   { keys: ['sochi', 'russia'],                                  file: 'SochiAutodrom'     },
   { keys: ['spa', 'belgium', 'francorchamps'],                  file: 'Spa'               },
   { keys: ['suzuka', 'japan'],                                  file: 'Suzuka'            },
@@ -46,17 +46,16 @@ function resolveFile(name) {
   return null;
 }
 
-// Unique ID counter for SVG filter isolation
 let _uid = 0;
 
 const CircuitSVG = ({ circuitName, animate = false, className = '' }) => {
-  const [svgData, setSvgData]   = useState(null); // { viewBox, paths[] }
-  const [error, setError]       = useState(false);
-  const svgRef                  = useRef(null);
-  const animRef                 = useRef(null);
-  const uidRef                  = useRef(`csf-${++_uid}`);
+  const [svgData, setSvgData] = useState(null);
+  const [error, setError]     = useState(false);
+  const svgRef                = useRef(null);
+  const animRef               = useRef([]);
+  const uidRef                = useRef(`csf-${++_uid}`);
 
-  // Fetch SVG on mount / name change
+  // Fetch SVG
   useEffect(() => {
     setSvgData(null);
     setError(false);
@@ -68,14 +67,10 @@ const CircuitSVG = ({ circuitName, animate = false, className = '' }) => {
       .then(r => { if (!r.ok) throw new Error('not found'); return r.text(); })
       .then(text => {
         if (cancelled) return;
-        // Parse viewBox
         const vbMatch = text.match(/viewBox="([^"]+)"/);
         const viewBox = vbMatch ? vbMatch[1] : '0 0 500 400';
-
-        // Extract all path d attributes
         const pathMatches = [...text.matchAll(/\sd="([^"]+)"/g)];
-        const paths = pathMatches.map(m => m[1]);
-
+        const paths = pathMatches.map(m => m[1]).filter(d => d.length > 50);
         if (paths.length === 0) { setError(true); return; }
         setSvgData({ viewBox, paths });
       })
@@ -84,67 +79,52 @@ const CircuitSVG = ({ circuitName, animate = false, className = '' }) => {
     return () => { cancelled = true; };
   }, [circuitName]);
 
-  // Racing line animation
+  // Animation using pathLength="1" — works regardless of coordinate space
   useEffect(() => {
+    animRef.current.forEach(id => cancelAnimationFrame(id));
+    animRef.current = [];
+
     if (!animate || !svgData || !svgRef.current) return;
 
-    const svg = svgRef.current;
-    // Animate all track paths
-    const trackPaths = svg.querySelectorAll('.circuit-track');
-    const racingLines = svg.querySelectorAll('.circuit-racing-line');
+    const lines = svgRef.current.querySelectorAll('.rl');
+    const ids = [];
 
-    // Kill previous
-    if (animRef.current) {
-      animRef.current.forEach(id => cancelAnimationFrame(id));
-    }
+    lines.forEach((line, i) => {
+      // pathLength="1" means dasharray/dashoffset are in 0..1 range
+      line.style.strokeDasharray = '1';
+      line.style.strokeDashoffset = '1';
 
-    const animations = [];
+      const delay    = i * 600;
+      const duration = 2800;
+      let start = null;
 
-    racingLines.forEach((line, i) => {
-      try {
-        const length = line.getTotalLength();
-        line.style.strokeDasharray = `${length}`;
-        line.style.strokeDashoffset = `${length}`;
-
-        // Stagger multi-path circuits (Suzuka)
-        const delay = i * 800;
-        const duration = 3000 + i * 500;
-        let start = null;
-
-        const step = (ts) => {
-          if (!start) start = ts + delay;
-          if (ts < start) { const id = requestAnimationFrame(step); animations.push(id); return; }
-          const elapsed = (ts - start) % (duration * 2);
-          const t = elapsed < duration
-            ? elapsed / duration
-            : 1 - (elapsed - duration) / duration;
-          line.style.strokeDashoffset = `${length * (1 - t)}`;
-          const id = requestAnimationFrame(step);
-          animations.push(id);
-        };
-        const id = requestAnimationFrame(step);
-        animations.push(id);
-      } catch (_) {}
+      const step = (ts) => {
+        if (!start) start = ts + delay;
+        if (ts < start) { ids.push(requestAnimationFrame(step)); return; }
+        const elapsed = (ts - start) % (duration * 2);
+        const t = elapsed < duration
+          ? elapsed / duration
+          : 1 - (elapsed - duration) / duration;
+        // Ease in-out
+        const eased = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+        line.style.strokeDashoffset = `${1 - eased}`;
+        ids.push(requestAnimationFrame(step));
+      };
+      ids.push(requestAnimationFrame(step));
     });
 
-    animRef.current = animations;
-    return () => animations.forEach(id => cancelAnimationFrame(id));
+    animRef.current = ids;
+    return () => ids.forEach(id => cancelAnimationFrame(id));
   }, [animate, svgData]);
 
-  // Stop animation when not active
+  // Reset when not animating
   useEffect(() => {
     if (!animate && svgRef.current) {
-      const lines = svgRef.current.querySelectorAll('.circuit-racing-line');
-      lines.forEach(line => {
-        try {
-          const length = line.getTotalLength();
-          line.style.strokeDashoffset = `${length}`;
-        } catch (_) {}
+      svgRef.current.querySelectorAll('.rl').forEach(l => {
+        l.style.strokeDashoffset = '1';
       });
-      if (animRef.current) {
-        animRef.current.forEach(id => cancelAnimationFrame(id));
-        animRef.current = [];
-      }
+      animRef.current.forEach(id => cancelAnimationFrame(id));
+      animRef.current = [];
     }
   }, [animate]);
 
@@ -153,7 +133,7 @@ const CircuitSVG = ({ circuitName, animate = false, className = '' }) => {
   if (error) {
     return (
       <div className={`flex items-center justify-center text-gray-600 text-xs ${className}`}>
-        <span>No layout available</span>
+        No layout available
       </div>
     );
   }
@@ -161,83 +141,78 @@ const CircuitSVG = ({ circuitName, animate = false, className = '' }) => {
   if (!svgData) {
     return (
       <div className={`flex items-center justify-center ${className}`}>
-        <div className="w-6 h-6 border-2 border-f1red border-t-transparent rounded-full animate-spin" />
+        <div className="w-5 h-5 border-2 border-f1red border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }
 
-  return (
-    <svg
-      ref={svgRef}
-      viewBox={svgData.viewBox}
-      className={className}
-      preserveAspectRatio="xMidYMid meet"
-      style={{ overflow: 'visible' }}
-    >
-      <defs>
-        {/* Glow filter — unique ID per instance to avoid conflicts */}
-        <filter id={`glow-${uid}`} x="-20%" y="-20%" width="140%" height="140%">
-          <feGaussianBlur stdDeviation="3" result="blur" />
-          <feMerge>
-            <feMergeNode in="blur" />
-            <feMergeNode in="SourceGraphic" />
-          </feMerge>
-        </filter>
-        <filter id={`glow-strong-${uid}`} x="-30%" y="-30%" width="160%" height="160%">
-          <feGaussianBlur stdDeviation="6" result="blur" />
-          <feMerge>
-            <feMergeNode in="blur" />
-            <feMergeNode in="SourceGraphic" />
-          </feMerge>
-        </filter>
-      </defs>
+  // Compute a stroke width that's proportional to the viewBox size
+  // so it looks consistent regardless of coordinate space
+  const [, , vbW, vbH] = svgData.viewBox.split(' ').map(Number);
+  const vbSize   = Math.max(vbW || 500, vbH || 400);
+  const trackW   = vbSize * 0.022;   // ~2.2% of viewBox — asphalt
+  const glowW    = vbSize * 0.038;   // outer glow halo
+  const racingW  = vbSize * 0.008;   // thin red racing line
 
-      {svgData.paths.map((d, i) => (
-        <g key={i}>
-          {/* Outer glow halo */}
-          <path
-            d={d}
-            fill="none"
-            stroke="rgba(225,6,0,0.15)"
-            strokeWidth="18"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-          {/* Track surface — dark asphalt */}
-          <path
-            className="circuit-track"
-            d={d}
-            fill="none"
-            stroke="#1e1e1e"
-            strokeWidth="10"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-          {/* Track edge — subtle white kerb line */}
-          <path
-            d={d}
-            fill="none"
-            stroke="rgba(255,255,255,0.08)"
-            strokeWidth="10"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeDasharray="4 12"
-          />
-          {/* Racing line — animated red */}
-          <path
-            className="circuit-racing-line"
-            d={d}
-            fill="none"
-            stroke="#E10600"
-            strokeWidth="3.5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            filter={`url(#glow-${uid})`}
-            style={{ willChange: 'stroke-dashoffset' }}
-          />
-        </g>
-      ))}
-    </svg>
+  return (
+    // overflow:hidden on wrapper prevents glow from bleeding outside card
+    <div className={`${className}`} style={{ overflow: 'hidden' }}>
+      <svg
+        ref={svgRef}
+        viewBox={svgData.viewBox}
+        width="100%"
+        height="100%"
+        preserveAspectRatio="xMidYMid meet"
+        style={{ display: 'block' }}
+      >
+        <defs>
+          <filter id={`glow-${uid}`} x="-25%" y="-25%" width="150%" height="150%">
+            <feGaussianBlur stdDeviation={vbSize * 0.004} result="blur" />
+            <feMerge>
+              <feMergeNode in="blur" />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
+          </filter>
+        </defs>
+
+        {svgData.paths.map((d, i) => (
+          <g key={i}>
+            {/* Outer red glow */}
+            <path d={d} fill="none"
+              stroke="rgba(225,6,0,0.18)"
+              strokeWidth={glowW}
+              strokeLinecap="round" strokeLinejoin="round"
+            />
+            {/* Dark asphalt track */}
+            <path d={d} fill="none"
+              stroke="#222"
+              strokeWidth={trackW}
+              strokeLinecap="round" strokeLinejoin="round"
+            />
+            {/* Subtle kerb dashes */}
+            <path d={d} fill="none"
+              stroke="rgba(255,255,255,0.07)"
+              strokeWidth={trackW}
+              strokeLinecap="round" strokeLinejoin="round"
+              strokeDasharray={`${vbSize * 0.006} ${vbSize * 0.018}`}
+            />
+            {/* Animated racing line — pathLength="1" normalises dashoffset */}
+            <path
+              className="rl"
+              d={d}
+              fill="none"
+              stroke="#E10600"
+              strokeWidth={racingW}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              pathLength="1"
+              filter={`url(#glow-${uid})`}
+              style={{ willChange: 'stroke-dashoffset' }}
+            />
+          </g>
+        ))}
+      </svg>
+    </div>
   );
 };
 

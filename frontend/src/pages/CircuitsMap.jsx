@@ -83,7 +83,7 @@ const DetailCard = ({ race, isPinned, onPin, onClose }) => (
     <div className="flex items-center justify-center px-5 py-4"
       style={{ height: '160px', background: 'rgba(0,0,0,0.3)' }}>
       <CircuitSVG
-        circuitName={race.circuit || race.name}
+        circuitName={[race.circuit, race.name].filter(Boolean).join(' ')}
         animate={true}
         className="w-full h-full"
       />
