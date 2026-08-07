@@ -128,32 +128,46 @@ const TiltCard = ({ legend, spinTrigger, direction }) => {
     isSpinning.current = true;
 
     const spinDir = direction > 0 ? 1 : -1;
+    const halfDur = 0.32;
 
-    const halfDur = 0.35;
-
-    // Phase 1: rotate 0 → ±90° (card disappears edge-on, no content visible)
+    // Phase 1: rotate 0 → ±90° AND fade image out simultaneously
+    // so the old driver is invisible before the card even reaches edge-on
     gsap.to(cardRef.current, {
       rotateY: spinDir * 90,
       duration: halfDur,
+      ease: 'power2.in',
+    });
+    gsap.to([front.current, back.current], {
+      opacity: 0,
+      duration: halfDur * 0.6, // fade out faster than the rotation
       ease: 'power1.in',
       onComplete() {
-        // Swap content while card is invisible at 90°
+        // Swap content while everything is invisible
         setCardLegend({ ...legend });
-        gsap.set(front.current, { opacity: 1 });
+        gsap.set(front.current, { opacity: 0 });
         gsap.set(back.current,  { opacity: 0 });
         if (shineRef.current) shineRef.current.style.background = 'none';
 
-        // Jump to the opposite edge (content faces away, still invisible)
-        gsap.set(cardRef.current, { rotateY: -spinDir * 90 });
+        // Wait for Phase 1 rotation to fully complete, then start Phase 2
+        gsap.delayedCall(halfDur * 0.4, () => {
+          // Jump to opposite edge
+          gsap.set(cardRef.current, { rotateY: -spinDir * 90 });
 
-        // Phase 2: rotate ∓90° → 0° (card reappears with new content, correct orientation)
-        gsap.to(cardRef.current, {
-          rotateY: 0,
-          duration: halfDur,
-          ease: 'power1.out',
-          onComplete() {
-            isSpinning.current = false;
-          },
+          // Phase 2: rotate ∓90° → 0° AND fade new content in
+          gsap.to(cardRef.current, {
+            rotateY: 0,
+            duration: halfDur,
+            ease: 'power2.out',
+          });
+          gsap.to(front.current, {
+            opacity: 1,
+            duration: halfDur * 0.7,
+            delay: halfDur * 0.3, // start fading in after card starts returning
+            ease: 'power1.out',
+            onComplete() {
+              isSpinning.current = false;
+            },
+          });
         });
       },
     });
