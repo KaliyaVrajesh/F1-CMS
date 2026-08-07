@@ -232,7 +232,8 @@ const TiltCard = ({ legend, spinTrigger, direction }) => {
         {/* FRONT face */}
         <div ref={front} className="absolute inset-0">
           <img src={cl.image} alt={cl.name}
-            className="w-full h-full object-cover object-top scale-110" />
+            className="w-full h-full object-cover object-top scale-110"
+            referrerPolicy="no-referrer" />
           <div className="absolute inset-0"
             style={{ background: `linear-gradient(to top, ${cl.bg}ff 0%, ${cl.bg}88 40%, transparent 100%)` }} />
         </div>
@@ -240,7 +241,8 @@ const TiltCard = ({ legend, spinTrigger, direction }) => {
         {/* BACK face */}
         <div ref={back} className="absolute inset-0" style={{ opacity: 0 }}>
           <img src={cl.image2 || cl.image} alt={`${cl.name} alt`}
-            className="w-full h-full object-cover object-top scale-110" />
+            className="w-full h-full object-cover object-top scale-110"
+            referrerPolicy="no-referrer" />
           <div className="absolute inset-0"
             style={{ background: `linear-gradient(to top, ${cl.bg}ff 0%, ${cl.bg}88 40%, transparent 100%)` }} />
           <div className="absolute top-3 right-3 px-2 py-0.5 rounded-full text-xs font-bold z-10"
@@ -312,13 +314,13 @@ const ImageUploadModal = ({ legend, onSave, onClose }) => {
         <input value={img1} onChange={e => setImg1(e.target.value)}
           className="w-full px-3 py-2 bg-dark-800 border border-gray-700 rounded-lg text-sm mb-1 focus:outline-none focus:border-f1red"
           placeholder="https://..." />
-        {img1 && <img src={img1} alt="preview" className="w-full h-28 object-cover rounded-lg mb-4 opacity-70" onError={e => e.target.style.display='none'} />}
+        {img1 && <img src={img1} alt="preview" className="w-full h-28 object-cover rounded-lg mb-4 opacity-70" referrerPolicy="no-referrer" onError={e => e.target.style.display='none'} />}
 
         <label className="block text-xs text-gray-400 uppercase tracking-widest mb-1">Back image URL (flip side)</label>
         <input value={img2} onChange={e => setImg2(e.target.value)}
           className="w-full px-3 py-2 bg-dark-800 border border-gray-700 rounded-lg text-sm mb-1 focus:outline-none focus:border-f1red"
           placeholder="https://..." />
-        {img2 && <img src={img2} alt="preview2" className="w-full h-28 object-cover rounded-lg mb-4 opacity-70" onError={e => e.target.style.display='none'} />}
+        {img2 && <img src={img2} alt="preview2" className="w-full h-28 object-cover rounded-lg mb-4 opacity-70" referrerPolicy="no-referrer" onError={e => e.target.style.display='none'} />}
 
         <div className="flex gap-3 mt-2">
           <button onClick={() => onSave(img1, img2)}
