@@ -129,35 +129,32 @@ const TiltCard = ({ legend, spinTrigger, direction }) => {
 
     const spinDir = direction > 0 ? 1 : -1;
 
-    // Use a proxy object so we can drive rotateY through 0→90→180
-    // and swap the image exactly at 90° (the invisible edge)
-    const proxy = { rotY: 0 };
-    let swapped = false;
+    const halfDur = 0.35;
 
-    gsap.to(proxy, {
-      rotY: 180,
-      duration: 0.75,
-      ease: 'power1.inOut',
-      onUpdate() {
-        const r = proxy.rotY * spinDir;
-        // Perspective-correct scaleX: cos(angle) gives natural card-edge thinning
-        const rad = (proxy.rotY * Math.PI) / 180;
-        const sx = Math.abs(Math.cos(rad));
-        gsap.set(cardRef.current, { rotateY: r, scaleX: sx });
-
-        // Swap at the midpoint (90°) — card is edge-on, invisible
-        if (!swapped && proxy.rotY >= 90) {
-          swapped = true;
-          setCardLegend({ ...legend });
-          gsap.set(front.current,  { opacity: 1 });
-          gsap.set(back.current,   { opacity: 0 });
-          if (shineRef.current) shineRef.current.style.background = 'none';
-        }
-      },
+    // Phase 1: rotate 0 → ±90° (card disappears edge-on, no content visible)
+    gsap.to(cardRef.current, {
+      rotateY: spinDir * 90,
+      duration: halfDur,
+      ease: 'power1.in',
       onComplete() {
-        // Snap back to clean zero
-        gsap.set(cardRef.current, { rotateY: 0, scaleX: 1 });
-        isSpinning.current = false;
+        // Swap content while card is invisible at 90°
+        setCardLegend({ ...legend });
+        gsap.set(front.current, { opacity: 1 });
+        gsap.set(back.current,  { opacity: 0 });
+        if (shineRef.current) shineRef.current.style.background = 'none';
+
+        // Jump to the opposite edge (content faces away, still invisible)
+        gsap.set(cardRef.current, { rotateY: -spinDir * 90 });
+
+        // Phase 2: rotate ∓90° → 0° (card reappears with new content, correct orientation)
+        gsap.to(cardRef.current, {
+          rotateY: 0,
+          duration: halfDur,
+          ease: 'power1.out',
+          onComplete() {
+            isSpinning.current = false;
+          },
+        });
       },
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
