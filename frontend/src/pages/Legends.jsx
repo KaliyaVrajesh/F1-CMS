@@ -298,35 +298,108 @@ const StatItem = ({ label, value, color, delay }) => {
 
 // ─── Admin image upload modal ─────────────────────────────────────────────────
 const ImageUploadModal = ({ legend, onSave, onClose }) => {
-  const [img1, setImg1] = useState(legend.image);
-  const [img2, setImg2] = useState(legend.image2 || '');
+  const [mode, setMode]       = useState('upload'); // 'upload' | 'url'
+  const [img1, setImg1]       = useState(legend.image);
+  const [img2, setImg2]       = useState(legend.image2 || '');
+  const [loading, setLoading] = useState(false);
+
+  const toBase64 = (file) => new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload  = () => resolve(reader.result); // "data:image/jpeg;base64,..."
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+
+  const handleFile = async (e, setter) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setLoading(true);
+    try { setter(await toBase64(file)); }
+    catch { toast.error('Failed to read file'); }
+    finally { setLoading(false); }
+  };
+
+  const isBase64 = (s) => s && s.startsWith('data:');
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
       <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
-        className="glass rounded-2xl p-6 w-full max-w-md mx-4"
+        className="glass rounded-2xl p-6 w-full max-w-md mx-4 max-h-[90vh] overflow-y-auto"
         style={{ border: `1px solid ${legend.accent}44` }}>
+
         <h3 className="font-f1heading font-black text-xl mb-1" style={{ color: legend.accent }}>
           Edit Images — {legend.name}
         </h3>
-        <p className="text-gray-500 text-xs mb-5">Paste direct image URLs (Wikipedia, Wikimedia, etc.)</p>
 
-        <label className="block text-xs text-gray-400 uppercase tracking-widest mb-1">Front image URL</label>
-        <input value={img1} onChange={e => setImg1(e.target.value)}
-          className="w-full px-3 py-2 bg-dark-800 border border-gray-700 rounded-lg text-sm mb-1 focus:outline-none focus:border-f1red"
-          placeholder="https://..." />
-        {img1 && <img src={img1} alt="preview" className="w-full h-28 object-cover rounded-lg mb-4 opacity-70" referrerPolicy="no-referrer" onError={e => e.target.style.display='none'} />}
+        {/* Mode toggle */}
+        <div className="flex gap-2 mt-3 mb-5">
+          {[['upload','📁 Upload File'],['url','🔗 Use URL']].map(([m, label]) => (
+            <button key={m} onClick={() => setMode(m)}
+              className="px-4 py-1.5 rounded-full text-xs font-bold transition"
+              style={{ background: mode === m ? legend.accent : 'rgba(255,255,255,0.06)', color: mode === m ? '#000' : '#888' }}>
+              {label}
+            </button>
+          ))}
+        </div>
 
-        <label className="block text-xs text-gray-400 uppercase tracking-widest mb-1">Back image URL (flip side)</label>
-        <input value={img2} onChange={e => setImg2(e.target.value)}
-          className="w-full px-3 py-2 bg-dark-800 border border-gray-700 rounded-lg text-sm mb-1 focus:outline-none focus:border-f1red"
-          placeholder="https://..." />
-        {img2 && <img src={img2} alt="preview2" className="w-full h-28 object-cover rounded-lg mb-4 opacity-70" referrerPolicy="no-referrer" onError={e => e.target.style.display='none'} />}
+        {mode === 'upload' ? (
+          <>
+            <p className="text-gray-500 text-xs mb-4">
+              Upload files directly — stored as Base64 in the database. No external links, no broken images ever.
+            </p>
 
-        <div className="flex gap-3 mt-2">
-          <button onClick={() => onSave(img1, img2)}
-            className="flex-1 py-2 rounded-lg font-bold text-sm transition"
+            <label className="block text-xs text-gray-400 uppercase tracking-widest mb-2">Front image</label>
+            <input type="file" accept="image/*" onChange={e => handleFile(e, setImg1)}
+              className="w-full text-sm text-gray-400 mb-2 cursor-pointer
+                file:mr-3 file:py-1.5 file:px-3 file:rounded-full file:border-0
+                file:text-xs file:font-bold file:cursor-pointer file:transition"
+              style={{ '--tw-file-button-bg': legend.accent }} />
+            {isBase64(img1)
+              ? <img src={img1} alt="preview" className="w-full h-28 object-cover rounded-lg mb-4 opacity-80" />
+              : img1 && <p className="text-xs text-gray-600 mb-3">Current: URL image — upload a file to replace it</p>
+            }
+
+            <label className="block text-xs text-gray-400 uppercase tracking-widest mb-2">Back image (flip side)</label>
+            <input type="file" accept="image/*" onChange={e => handleFile(e, setImg2)}
+              className="w-full text-sm text-gray-400 mb-2 cursor-pointer
+                file:mr-3 file:py-1.5 file:px-3 file:rounded-full file:border-0
+                file:text-xs file:font-bold file:cursor-pointer file:transition" />
+            {isBase64(img2)
+              ? <img src={img2} alt="preview2" className="w-full h-28 object-cover rounded-lg mb-4 opacity-80" />
+              : img2 && <p className="text-xs text-gray-600 mb-3">Current: URL image — upload a file to replace it</p>
+            }
+          </>
+        ) : (
+          <>
+            <p className="text-gray-500 text-xs mb-4">
+              Paste direct image URLs. Note: external URLs may break over time.
+            </p>
+
+            <label className="block text-xs text-gray-400 uppercase tracking-widest mb-1">Front image URL</label>
+            <input value={isBase64(img1) ? '' : img1} onChange={e => setImg1(e.target.value)}
+              className="w-full px-3 py-2 bg-dark-800 border border-gray-700 rounded-lg text-sm mb-1 focus:outline-none focus:border-f1red"
+              placeholder="https://..." />
+            {!isBase64(img1) && img1 && (
+              <img src={img1} alt="preview" className="w-full h-28 object-cover rounded-lg mb-4 opacity-70"
+                referrerPolicy="no-referrer" onError={e => e.target.style.display='none'} />
+            )}
+
+            <label className="block text-xs text-gray-400 uppercase tracking-widest mb-1 mt-2">Back image URL (flip side)</label>
+            <input value={isBase64(img2) ? '' : img2} onChange={e => setImg2(e.target.value)}
+              className="w-full px-3 py-2 bg-dark-800 border border-gray-700 rounded-lg text-sm mb-1 focus:outline-none focus:border-f1red"
+              placeholder="https://..." />
+            {!isBase64(img2) && img2 && (
+              <img src={img2} alt="preview2" className="w-full h-28 object-cover rounded-lg mb-4 opacity-70"
+                referrerPolicy="no-referrer" onError={e => e.target.style.display='none'} />
+            )}
+          </>
+        )}
+
+        <div className="flex gap-3 mt-4">
+          <button onClick={() => !loading && onSave(img1, img2)} disabled={loading}
+            className="flex-1 py-2 rounded-lg font-bold text-sm transition disabled:opacity-50"
             style={{ background: legend.accent, color: '#000' }}>
-            Save
+            {loading ? 'Processing…' : 'Save'}
           </button>
           <button onClick={onClose}
             className="px-6 py-2 rounded-lg font-bold text-sm bg-gray-800 hover:bg-gray-700 transition">
