@@ -304,10 +304,22 @@ const ImageUploadModal = ({ legend, onSave, onClose }) => {
   const [loading, setLoading] = useState(false);
 
   const toBase64 = (file) => new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload  = () => resolve(reader.result); // "data:image/jpeg;base64,..."
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
+    // Compress image to max 800px wide and ~80% quality before encoding
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      const MAX = 800;
+      const scale = Math.min(1, MAX / Math.max(img.width, img.height));
+      const w = Math.round(img.width  * scale);
+      const h = Math.round(img.height * scale);
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      URL.revokeObjectURL(url);
+      resolve(canvas.toDataURL('image/jpeg', 0.82));
+    };
+    img.onerror = reject;
+    img.src = url;
   });
 
   const handleFile = async (e, setter) => {
