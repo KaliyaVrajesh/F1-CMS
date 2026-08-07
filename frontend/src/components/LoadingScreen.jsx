@@ -1,41 +1,31 @@
 import { useEffect, useRef, useState } from 'react';
 
-const LoadingScreen = ({ isLoading }) => {
+const LoadingScreen = ({ isLoading, loadPercent }) => {
   const [progress, setProgress]   = useState(0);
   const [phase, setPhase]         = useState('writing');
   const [visible, setVisible]     = useState(false);
   const [exiting, setExiting]     = useState(false);
-  const progressRef               = useRef(0);
-  const timerRef                  = useRef(null);
 
-  // Show on first mount + whenever isLoading flips true
+  // Show on mount
+  useEffect(() => { setVisible(true); }, []);
+
+  // Sync progress from real asset loading, never go backward
   useEffect(() => {
-    if (isLoading) {
-      setVisible(true);
-      setExiting(false);
-      setProgress(0);
-      setPhase('writing');
-      progressRef.current = 0;
+    if (typeof loadPercent === 'number') {
+      setProgress(prev => Math.max(prev, loadPercent));
+      if (loadPercent > 30) setPhase('text');
+    }
+  }, [loadPercent]);
 
-      clearInterval(timerRef.current);
-      timerRef.current = setInterval(() => {
-        progressRef.current = Math.min(
-          99,
-          progressRef.current + (progressRef.current < 60 ? 3 : progressRef.current < 85 ? 1.2 : 0.4)
-        );
-        setProgress(Math.round(progressRef.current));
-        if (progressRef.current > 30)  setPhase('text');
-      }, 40);
-    } else {
-      clearInterval(timerRef.current);
-      progressRef.current = 100;
+  // Exit animation when done
+  useEffect(() => {
+    if (!isLoading) {
       setProgress(100);
       setTimeout(() => {
         setExiting(true);
         setTimeout(() => setVisible(false), 700);
-      }, 300);
+      }, 400);
     }
-    return () => clearInterval(timerRef.current);
   }, [isLoading]);
 
   if (!visible) return null;
@@ -228,7 +218,9 @@ const WritingText = ({ phase }) => {
 
   return (
     <div className="relative h-12 w-72 flex items-center justify-center">
-      <svg viewBox="0 0 200 44" className="absolute inset-0 w-full h-full" style={{ overflow: 'visible' }}>
+      {/* SVG cursive writing — fades out once text label fades in */}
+      <svg viewBox="0 0 200 44" className="absolute inset-0 w-full h-full"
+        style={{ overflow: 'visible', opacity: showLabel ? 0 : 1, transition: 'opacity 0.4s ease' }}>
         <defs>
           <filter id="glow-write" x="-20%" y="-20%" width="140%" height="140%">
             <feGaussianBlur stdDeviation="1.5" result="b" />
@@ -252,17 +244,18 @@ const WritingText = ({ phase }) => {
         ))}
       </svg>
 
-      {/* Text fades in after writing completes */}
+      {/* Clean text fades in after writing completes — replaces the SVG */}
       <div
-        className="font-f1heading font-black text-lg uppercase tracking-[0.28em] z-10"
+        className="font-f1heading font-black text-xl uppercase tracking-[0.3em] z-10"
         style={{
           color: '#E10600',
           opacity: showLabel ? 1 : 0,
           transition: 'opacity 0.5s ease',
-          textShadow: '0 0 18px rgba(225,6,0,0.35)',
+          textShadow: '0 0 20px rgba(225,6,0,0.4)',
+          letterSpacing: '0.3em',
         }}
       >
-        Formula&nbsp;<span className="text-white">1</span>
+        Formula&nbsp;<span style={{ color: '#ffffff' }}>1</span>
       </div>
     </div>
   );

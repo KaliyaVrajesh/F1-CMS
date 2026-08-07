@@ -2,6 +2,7 @@ import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-route
 import { Toaster } from 'react-hot-toast';
 import { AuthProvider } from './context/AuthContext';
 import { useState, useEffect, useRef } from 'react';
+import { useProgress } from '@react-three/drei';
 import Layout from './layouts/Layout';
 import Home from './pages/Home';
 import PostDetail from './pages/PostDetail';
@@ -26,26 +27,41 @@ import AdminRoute from './components/AdminRoute';
 import LoadingScreen from './components/LoadingScreen';
 
 function AppContent() {
-  const location  = useLocation();
-  const [isLoading, setIsLoading] = useState(true); // true on first load
+  const location    = useLocation();
   const isFirstLoad = useRef(true);
+  const [isLoading, setIsLoading]     = useState(true);
+  const [glbReady, setGlbReady]       = useState(false);
+  const [windowReady, setWindowReady] = useState(false);
+
+  // Track Three.js / GLB loading progress via drei's useProgress
+  const { progress: glbProgress, active } = useProgress();
 
   useEffect(() => {
-    // Initial load: show cinematic loading screen, hide after window load + min duration
+    // GLBs done when progress hits 100 and loader is no longer active
+    if (glbProgress >= 100 && !active) setGlbReady(true);
+    // If Three.js never starts loading (non-home routes), mark ready after 1s
+    if (glbProgress === 0 && !active) {
+      const t = setTimeout(() => setGlbReady(true), 1000);
+      return () => clearTimeout(t);
+    }
+  }, [glbProgress, active]);
+
+  // Window load event
+  useEffect(() => {
     const MIN_DURATION = 2800;
     const started = Date.now();
 
     const finish = () => {
-      const elapsed  = Date.now() - started;
+      const elapsed   = Date.now() - started;
       const remaining = Math.max(0, MIN_DURATION - elapsed);
-      setTimeout(() => setIsLoading(false), remaining);
+      setTimeout(() => setWindowReady(true), remaining);
     };
 
     if (document.readyState === 'complete') {
       finish();
     } else {
       window.addEventListener('load', finish, { once: true });
-      const fallback = setTimeout(() => setIsLoading(false), 7000);
+      const fallback = setTimeout(() => setWindowReady(true), 8000);
       return () => {
         window.removeEventListener('load', finish);
         clearTimeout(fallback);
@@ -53,14 +69,26 @@ function AppContent() {
     }
   }, []);
 
-  // Route changes after first load — no loading screen needed
+  // Hide loading screen only when BOTH are ready
+  useEffect(() => {
+    if (windowReady && glbReady) {
+      setIsLoading(false);
+    }
+  }, [windowReady, glbReady]);
+
+  // Pass live GLB progress percentage to loading screen
+  const loadPercent = Math.round(
+    (glbProgress * 0.6) + (windowReady ? 40 : 0)
+  );
+
+  // Route changes after first load — no full loading screen
   useEffect(() => {
     if (isFirstLoad.current) { isFirstLoad.current = false; return; }
   }, [location.pathname]);
 
   return (
     <>
-      <LoadingScreen isLoading={isLoading} />
+      <LoadingScreen isLoading={isLoading} loadPercent={loadPercent} />
       <Routes>
         {/* Liquid Hero - Full screen, no layout */}
         <Route path="/liquid-hero" element={<LiquidHero />} />
