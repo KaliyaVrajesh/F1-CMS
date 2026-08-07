@@ -1,7 +1,7 @@
 import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { AuthProvider } from './context/AuthContext';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Layout from './layouts/Layout';
 import Home from './pages/Home';
 import PostDetail from './pages/PostDetail';
@@ -26,19 +26,36 @@ import AdminRoute from './components/AdminRoute';
 import LoadingScreen from './components/LoadingScreen';
 
 function AppContent() {
-  const location = useLocation();
-  const [isLoading, setIsLoading] = useState(false);
+  const location  = useLocation();
+  const [isLoading, setIsLoading] = useState(true); // true on first load
+  const isFirstLoad = useRef(true);
 
   useEffect(() => {
-    // Show loading screen on route change
-    setIsLoading(true);
-    
-    // Hide loading screen after a brief delay
-    const timer = setTimeout(() => {
-      setIsLoading(false);
-    }, 300);
+    // Initial load: show cinematic loading screen, hide after window load + min duration
+    const MIN_DURATION = 2800;
+    const started = Date.now();
 
-    return () => clearTimeout(timer);
+    const finish = () => {
+      const elapsed  = Date.now() - started;
+      const remaining = Math.max(0, MIN_DURATION - elapsed);
+      setTimeout(() => setIsLoading(false), remaining);
+    };
+
+    if (document.readyState === 'complete') {
+      finish();
+    } else {
+      window.addEventListener('load', finish, { once: true });
+      const fallback = setTimeout(() => setIsLoading(false), 7000);
+      return () => {
+        window.removeEventListener('load', finish);
+        clearTimeout(fallback);
+      };
+    }
+  }, []);
+
+  // Route changes after first load — no loading screen needed
+  useEffect(() => {
+    if (isFirstLoad.current) { isFirstLoad.current = false; return; }
   }, [location.pathname]);
 
   return (
