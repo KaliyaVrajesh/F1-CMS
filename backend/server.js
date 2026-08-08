@@ -26,6 +26,8 @@ app.use('/api/seasons', require('./routes/seasonRoutes'));
 app.use('/api/races', require('./routes/raceRoutes'));
 app.use('/api/standings', require('./routes/standingsRoutes'));
 app.use('/api/legends',  require('./routes/legendRoutes'));
+// Live F1 data proxy (Ergast + OpenF1)
+app.use('/api/f1', require('./routes/f1DataRoutes'));
 
 // Health check
 app.get('/', (req, res) => {

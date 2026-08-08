@@ -78,4 +78,55 @@ export const getConstructorStandings = (seasonYear) => api.get(`/standings/const
 export const getLegendImages = () => api.get('/legends');
 export const updateLegendImages = (legendId, data) => api.put(`/legends/${legendId}`, data);
 
+// ── F1 Live Data API (Ergast + OpenF1 proxied through backend) ────────────────
+
+// Schedule & seasons
+export const getF1Schedule = (year) =>
+  api.get('/f1/schedule', { params: year ? { year } : {} });
+export const getF1AllSeasons = () => api.get('/f1/seasons');
+export const getF1NextRace   = () => api.get('/f1/next-race');
+
+// Standings (live, official)
+export const getF1DriverStandings      = (year) =>
+  api.get(`/f1/standings/drivers${year ? `/${year}` : ''}`);
+export const getF1ConstructorStandings = (year) =>
+  api.get(`/f1/standings/constructors${year ? `/${year}` : ''}`);
+
+// Race & qualifying results
+export const getF1LastRaceResults     = () => api.get('/f1/results/last');
+export const getF1RaceResults         = (year, round) => api.get(`/f1/results/${year}/${round}`);
+export const getF1QualifyingResults   = (year, round) => api.get(`/f1/qualifying/${year}/${round}`);
+
+// Lap & pit data
+export const getF1LapTimes  = (year, round, lap) =>
+  api.get(`/f1/laps/${year}/${round}${lap ? `/${lap}` : ''}`);
+export const getF1PitStops  = (year, round) => api.get(`/f1/pitstops/${year}/${round}`);
+
+// Driver career stats
+export const getF1DriverCareer = (driverId) => api.get(`/f1/driver/${driverId}/career`);
+
+// OpenF1 live session data
+export const getF1LiveSession   = ()              => api.get('/f1/live/session');
+export const getF1LiveSessions  = (year, gp)      =>
+  api.get('/f1/live/sessions', { params: { ...(year && { year }), ...(gp && { gp }) } });
+export const getF1LivePositions = (sessionKey)    =>
+  api.get('/f1/live/positions', { params: sessionKey ? { session_key: sessionKey } : {} });
+export const getF1LiveIntervals = (sessionKey)    =>
+  api.get('/f1/live/intervals', { params: sessionKey ? { session_key: sessionKey } : {} });
+export const getF1LivePitStops  = (sessionKey)    =>
+  api.get('/f1/live/pitstops',  { params: sessionKey ? { session_key: sessionKey } : {} });
+export const getF1Weather       = (sessionKey)    =>
+  api.get('/f1/live/weather',   { params: sessionKey ? { session_key: sessionKey } : {} });
+export const getF1Stints        = (sessionKey)    =>
+  api.get('/f1/live/stints',    { params: sessionKey ? { session_key: sessionKey } : {} });
+export const getF1TeamRadio     = (sessionKey)    =>
+  api.get('/f1/live/radio',     { params: sessionKey ? { session_key: sessionKey } : {} });
+export const getF1CurrentTyres  = (sessionKey)    =>
+  api.get('/f1/live/tyres',     { params: sessionKey ? { session_key: sessionKey } : {} });
+export const getF1LiveDrivers   = (sessionKey)    =>
+  api.get('/f1/live/drivers',   { params: sessionKey ? { session_key: sessionKey } : {} });
+
+// Compound dashboard snapshot
+export const getF1Dashboard = () => api.get('/f1/dashboard');
+
 export default api;
