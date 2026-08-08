@@ -119,7 +119,15 @@ const TiltCard = ({ legend, spinTrigger, direction }) => {
   // Track current displayed legend inside the card (lags behind by half a spin)
   const displayedLegend = useRef(legend);
   const [cardLegend, setCardLegend] = useState(legend);
+  const [imageLoaded, setImageLoaded] = useState(false);
+  const [imageError, setImageError] = useState(false);
   const isSpinning = useRef(false);
+
+  // Reset image states when legend changes
+  useEffect(() => {
+    setImageLoaded(false);
+    setImageError(false);
+  }, [cardLegend.id]);
 
   // ── Spin animation on legend change ──────────────────────────────────────
   useEffect(() => {
@@ -223,6 +231,19 @@ const TiltCard = ({ legend, spinTrigger, direction }) => {
 
   const cl = cardLegend;
 
+  // Handler for image load success
+  const handleImageLoad = () => {
+    setImageLoaded(true);
+    setImageError(false);
+  };
+
+  // Handler for image load failure
+  const handleImageError = (e) => {
+    console.warn(`Failed to load image for ${cl.name}:`, e.target.src);
+    setImageError(true);
+    setImageLoaded(false);
+  };
+
   return (
     <div ref={wrapRef} style={{ perspective: '900px' }} className="flex justify-center">
       <div
@@ -234,6 +255,7 @@ const TiltCard = ({ legend, spinTrigger, direction }) => {
           border: `1px solid ${cl.accent}55`,
           height: '480px',
           willChange: 'transform',
+          background: imageError ? `linear-gradient(135deg, ${cl.accent}15 0%, ${cl.bg} 100%)` : 'transparent',
         }}
       >
         {/* Glow blob */}
@@ -241,41 +263,70 @@ const TiltCard = ({ legend, spinTrigger, direction }) => {
           style={{ background: `radial-gradient(circle, ${cl.accent}35 0%, transparent 70%)`, filter: 'blur(28px)', zIndex: 1 }} />
 
         {/* FRONT face */}
-        <div ref={front} className="absolute inset-0">
+        <div ref={front} className="absolute inset-0" style={{ background: imageError ? `linear-gradient(135deg, ${cl.accent}15 0%, ${cl.bg} 100%)` : 'transparent' }}>
           <img 
             src={cl.image} 
             alt={cl.name}
             className="w-full h-full object-cover object-top scale-110"
-            referrerPolicy="no-referrer"
-            crossOrigin="anonymous"
-            loading="eager"
-            fetchPriority="high"
-            onError={(e) => {
-              // Fallback: show a gradient background if image fails to load
-              e.target.style.display = 'none';
-              e.target.parentElement.style.background = `linear-gradient(135deg, ${cl.accent}22 0%, ${cl.bg} 100%)`;
+            style={{ 
+              opacity: imageLoaded && !imageError ? 1 : 0,
+              transition: 'opacity 0.3s ease-in-out',
+              display: imageError ? 'none' : 'block'
             }}
+            onLoad={handleImageLoad}
+            onError={handleImageError}
+            loading="eager"
+            decoding="async"
           />
-          <div className="absolute inset-0"
-            style={{ background: `linear-gradient(to top, ${cl.bg}dd 0%, ${cl.bg}66 40%, transparent 100%)` }} />
+          
+          {/* Fallback: Show driver number if image fails */}
+          {imageError && (
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div className="text-center">
+                <div className="text-9xl font-f1heading font-black opacity-20 mb-4" style={{ color: cl.accent }}>
+                  {cl.number}
+                </div>
+                <div className="text-xs text-gray-600 uppercase tracking-widest">
+                  Image unavailable
+                </div>
+              </div>
+            </div>
+          )}
+          
+          {/* Gradient overlay - lighter to show images better */}
+          <div className="absolute inset-0 pointer-events-none"
+            style={{ background: `linear-gradient(to top, ${cl.bg}ee 0%, ${cl.bg}44 40%, transparent 70%)` }} />
         </div>
 
         {/* BACK face */}
-        <div ref={back} className="absolute inset-0" style={{ opacity: 0 }}>
+        <div ref={back} className="absolute inset-0" style={{ opacity: 0, background: imageError ? `linear-gradient(135deg, ${cl.accent}15 0%, ${cl.bg} 100%)` : 'transparent' }}>
           <img 
             src={cl.image2 || cl.image} 
-            alt={`${cl.name} alt`}
+            alt={`${cl.name} back`}
             className="w-full h-full object-cover object-top scale-110"
-            referrerPolicy="no-referrer"
-            crossOrigin="anonymous"
-            loading="eager"
-            onError={(e) => {
-              e.target.style.display = 'none';
-              e.target.parentElement.style.background = `linear-gradient(135deg, ${cl.accent}22 0%, ${cl.bg} 100%)`;
+            style={{ 
+              opacity: imageLoaded && !imageError ? 1 : 0,
+              transition: 'opacity 0.3s ease-in-out',
+              display: imageError ? 'none' : 'block'
             }}
+            onLoad={handleImageLoad}
+            onError={handleImageError}
+            loading="eager"
+            decoding="async"
           />
-          <div className="absolute inset-0"
-            style={{ background: `linear-gradient(to top, ${cl.bg}dd 0%, ${cl.bg}66 40%, transparent 100%)` }} />
+          
+          {/* Fallback for back image */}
+          {imageError && (
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div className="text-9xl font-f1heading font-black opacity-20" style={{ color: cl.accent }}>
+                {cl.number}
+              </div>
+            </div>
+          )}
+          
+          {/* Gradient overlay */}
+          <div className="absolute inset-0 pointer-events-none"
+            style={{ background: `linear-gradient(to top, ${cl.bg}ee 0%, ${cl.bg}44 40%, transparent 70%)` }} />
           <div className="absolute top-3 right-3 px-2 py-0.5 rounded-full text-xs font-bold z-10"
             style={{ background: `${cl.accent}33`, color: cl.accent, border: `1px solid ${cl.accent}55` }}>
             ← flip
