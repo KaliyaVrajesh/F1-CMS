@@ -4,9 +4,9 @@
  * Aggregates data from multiple free F1 APIs with in-memory caching.
  *
  * APIs Used:
- *  1. Ergast Motor Racing API  — https://ergast.com/mrd/
- *     Historical + current season: standings, results, qualifying, schedules
- *     Reliable, well-documented, free, no API key required.
+ *  1. Jolpica F1 API           — https://api.jolpi.ca/ergast/f1
+ *     Drop-in replacement for Ergast (which shut down end of 2024).
+ *     Identical URL structure and response format. Free, no API key.
  *
  *  2. OpenF1 API               — https://openf1.org/
  *     Live/session telemetry: pit stops, intervals, car data, weather, radio
@@ -32,8 +32,8 @@ const microCache  = new NodeCache({ stdTTL: 15,            checkperiod: 5   }); 
 
 // ── HTTP clients ──────────────────────────────────────────────────────────────
 const ergast = axios.create({
-  baseURL: 'https://ergast.com/api/f1',
-  timeout: 10000,
+  baseURL: 'https://api.jolpi.ca/ergast/f1',  // Jolpica: drop-in Ergast replacement (Ergast shut down end of 2024)
+  timeout: 12000,
   headers: { 'Accept': 'application/json' },
 });
 
@@ -308,13 +308,31 @@ async function getPitStops(year = currentYear(), round) {
 }
 
 /**
- * Season list (all years F1 has run).
+ * Season list (all years F1 has run) — paginates to get all results.
  */
 async function getAllSeasons() {
   return cachedFetch(longCache, 'allSeasons', async () => {
-    const { data } = await ergast.get('/seasons.json?limit=100&offset=0');
-    const seasons = data?.MRData?.SeasonTable?.Seasons || [];
-    return seasons.map(s => parseInt(s.season, 10)).sort((a, b) => b - a);
+    const limit = 100;
+    const { data: first } = await ergast.get(`/seasons.json?limit=${limit}&offset=0`);
+    const total = parseInt(first?.MRData?.total || '0', 10);
+    let seasons = [...(first?.MRData?.SeasonTable?.Seasons || [])];
+
+    // Fetch remaining pages if total > 100
+    const pages = Math.ceil(total / limit);
+    if (pages > 1) {
+      const rest = await Promise.all(
+        Array.from({ length: pages - 1 }, (_, i) =>
+          ergast.get(`/seasons.json?limit=${limit}&offset=${(i + 1) * limit}`)
+        )
+      );
+      for (const { data } of rest) {
+        seasons = seasons.concat(data?.MRData?.SeasonTable?.Seasons || []);
+      }
+    }
+
+    return seasons
+      .map(s => parseInt(s.season, 10))
+      .sort((a, b) => b - a); // newest first
   });
 }
 
