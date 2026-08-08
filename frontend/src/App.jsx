@@ -26,15 +26,64 @@ import PrivateRoute from './components/PrivateRoute';
 import AdminRoute from './components/AdminRoute';
 import LoadingScreen from './components/LoadingScreen';
 
+// Legend images to preload
+const LEGEND_IMAGES = [
+  'https://upload.wikimedia.org/wikipedia/commons/thumb/5/5e/Ayrton_Senna_1991_Canada.jpg/800px-Ayrton_Senna_1991_Canada.jpg',
+  'https://upload.wikimedia.org/wikipedia/commons/thumb/4/4e/Ayrton_Senna_1993_Britain.jpg/800px-Ayrton_Senna_1993_Britain.jpg',
+  'https://upload.wikimedia.org/wikipedia/commons/thumb/3/31/Michael_Schumacher_2012_Malaysia_FP2.jpg/800px-Michael_Schumacher_2012_Malaysia_FP2.jpg',
+  'https://upload.wikimedia.org/wikipedia/commons/thumb/b/b2/Michael_Schumacher_2004_Canada.jpg/800px-Michael_Schumacher_2004_Canada.jpg',
+  'https://upload.wikimedia.org/wikipedia/commons/thumb/3/3e/Alain_Prost_1990_Canada.jpg/800px-Alain_Prost_1990_Canada.jpg',
+  'https://upload.wikimedia.org/wikipedia/commons/thumb/e/e3/Alain_Prost_1986_Canada.jpg/800px-Alain_Prost_1986_Canada.jpg',
+  'https://upload.wikimedia.org/wikipedia/commons/thumb/5/5b/Niki_Lauda_1974_adjusted.jpg/800px-Niki_Lauda_1974_adjusted.jpg',
+  'https://upload.wikimedia.org/wikipedia/commons/thumb/9/9e/Niki_Lauda_1976_Canada.jpg/800px-Niki_Lauda_1976_Canada.jpg',
+  'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a9/Juan_Manuel_Fangio_1952.jpg/800px-Juan_Manuel_Fangio_1952.jpg',
+  'https://upload.wikimedia.org/wikipedia/commons/thumb/6/6e/Juan_Manuel_Fangio_1955_Nurburgring.jpg/800px-Juan_Manuel_Fangio_1955_Nurburgring.jpg',
+  'https://upload.wikimedia.org/wikipedia/commons/thumb/7/7e/Jim_Clark_1965_Brands_Hatch.jpg/800px-Jim_Clark_1965_Brands_Hatch.jpg',
+  'https://upload.wikimedia.org/wikipedia/commons/thumb/c/c3/Jim_Clark_1967_Zandvoort.jpg/800px-Jim_Clark_1967_Zandvoort.jpg',
+];
+
 function AppContent() {
   const location    = useLocation();
   const isFirstLoad = useRef(true);
   const [isLoading, setIsLoading]     = useState(true);
   const [glbReady, setGlbReady]       = useState(false);
   const [windowReady, setWindowReady] = useState(false);
+  const [imagesReady, setImagesReady] = useState(false);
+  const [imageProgress, setImageProgress] = useState(0);
 
   // Track Three.js / GLB loading progress via drei's useProgress
   const { progress: glbProgress, active } = useProgress();
+
+  // Preload legend images on mount
+  useEffect(() => {
+    let loadedCount = 0;
+    const totalImages = LEGEND_IMAGES.length;
+
+    if (totalImages === 0) {
+      setImagesReady(true);
+      return;
+    }
+
+    LEGEND_IMAGES.forEach(src => {
+      const img = new Image();
+      img.onload = () => {
+        loadedCount++;
+        setImageProgress(Math.floor((loadedCount / totalImages) * 100));
+        if (loadedCount === totalImages) {
+          setImagesReady(true);
+        }
+      };
+      img.onerror = () => {
+        loadedCount++;
+        console.warn(`Failed to preload legend image: ${src}`);
+        setImageProgress(Math.floor((loadedCount / totalImages) * 100));
+        if (loadedCount === totalImages) {
+          setImagesReady(true);
+        }
+      };
+      img.src = src;
+    });
+  }, []);
 
   useEffect(() => {
     // GLBs done when progress hits 100 and loader is no longer active
@@ -69,16 +118,16 @@ function AppContent() {
     }
   }, []);
 
-  // Hide loading screen only when BOTH are ready
+  // Hide loading screen only when ALL are ready
   useEffect(() => {
-    if (windowReady && glbReady) {
+    if (windowReady && glbReady && imagesReady) {
       setIsLoading(false);
     }
-  }, [windowReady, glbReady]);
+  }, [windowReady, glbReady, imagesReady]);
 
-  // Pass live GLB progress percentage to loading screen
+  // Calculate combined progress percentage for loading screen
   const loadPercent = Math.round(
-    (glbProgress * 0.6) + (windowReady ? 40 : 0)
+    (glbProgress * 0.5) + (imageProgress * 0.3) + (windowReady ? 20 : 0)
   );
 
   // Route changes after first load — no full loading screen

@@ -4,7 +4,6 @@ import gsap from 'gsap';
 import useAuth from '../hooks/useAuth';
 import { getLegendImages, updateLegendImages as apiUpdateImages } from '../services/api';
 import toast from 'react-hot-toast';
-import LoadingScreen from '../components/LoadingScreen';
 
 // ─── Legend data ──────────────────────────────────────────────────────────────
 const DEFAULT_LEGENDS = [
@@ -464,55 +463,11 @@ const Legends = () => {
   const [transitioning, setTransitioning] = useState(false);
   const [editingIdx, setEditingIdx] = useState(null);
   const [spinTrigger, setSpinTrigger] = useState(0); // increment to fire spin
-  const [imagesLoaded, setImagesLoaded] = useState(false);
-  const [loadProgress, setLoadProgress] = useState(0);
   const bgRef = useRef(null);
   const lastWheelTime = useRef(0);
   const touchStartY = useRef(0);
 
   const legend = legends[current];
-
-  // Preload all legend images with progress tracking
-  useEffect(() => {
-    const imagesToLoad = [];
-    legends.forEach(l => {
-      if (l.image) imagesToLoad.push(l.image);
-      if (l.image2) imagesToLoad.push(l.image2);
-    });
-
-    if (imagesToLoad.length === 0) {
-      setImagesLoaded(true);
-      return;
-    }
-
-    let loadedCount = 0;
-    let failedCount = 0;
-    const totalImages = imagesToLoad.length;
-
-    const updateProgress = () => {
-      const progress = Math.floor(((loadedCount + failedCount) / totalImages) * 100);
-      setLoadProgress(progress);
-      
-      if (loadedCount + failedCount === totalImages) {
-        // Small delay to show 100% before hiding loader
-        setTimeout(() => setImagesLoaded(true), 400);
-      }
-    };
-
-    imagesToLoad.forEach(src => {
-      const img = new Image();
-      img.onload = () => {
-        loadedCount++;
-        updateProgress();
-      };
-      img.onerror = () => {
-        failedCount++;
-        console.warn(`Failed to load image: ${src}`);
-        updateProgress();
-      };
-      img.src = src;
-    });
-  }, [legends]);
 
   // Load image overrides from DB and merge into defaults
   useEffect(() => {
@@ -523,12 +478,11 @@ const Legends = () => {
           prev.map(l => {
             const override = data.find(d => d.legendId === l.id);
             if (!override) return l;
-            const updated = {
+            return {
               ...l,
               ...(override.image  ? { image:  override.image  } : {}),
               ...(override.image2 ? { image2: override.image2 } : {}),
             };
-            return updated;
           })
         );
       })
@@ -596,8 +550,6 @@ const Legends = () => {
 
   return (
     <>
-      <LoadingScreen isLoading={!imagesLoaded} loadPercent={loadProgress} />
-
       {editingIdx !== null && (
         <ImageUploadModal
           legend={legends[editingIdx]}
