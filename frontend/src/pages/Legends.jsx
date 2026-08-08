@@ -242,23 +242,40 @@ const TiltCard = ({ legend, spinTrigger, direction }) => {
 
         {/* FRONT face */}
         <div ref={front} className="absolute inset-0">
-          <img src={cl.image} alt={cl.name}
+          <img 
+            src={cl.image} 
+            alt={cl.name}
             className="w-full h-full object-cover object-top scale-110"
             referrerPolicy="no-referrer"
+            crossOrigin="anonymous"
             loading="eager"
-            fetchPriority="high" />
+            fetchPriority="high"
+            onError={(e) => {
+              // Fallback: show a gradient background if image fails to load
+              e.target.style.display = 'none';
+              e.target.parentElement.style.background = `linear-gradient(135deg, ${cl.accent}22 0%, ${cl.bg} 100%)`;
+            }}
+          />
           <div className="absolute inset-0"
-            style={{ background: `linear-gradient(to top, ${cl.bg}ff 0%, ${cl.bg}88 40%, transparent 100%)` }} />
+            style={{ background: `linear-gradient(to top, ${cl.bg}dd 0%, ${cl.bg}66 40%, transparent 100%)` }} />
         </div>
 
         {/* BACK face */}
         <div ref={back} className="absolute inset-0" style={{ opacity: 0 }}>
-          <img src={cl.image2 || cl.image} alt={`${cl.name} alt`}
+          <img 
+            src={cl.image2 || cl.image} 
+            alt={`${cl.name} alt`}
             className="w-full h-full object-cover object-top scale-110"
             referrerPolicy="no-referrer"
-            loading="eager" />
+            crossOrigin="anonymous"
+            loading="eager"
+            onError={(e) => {
+              e.target.style.display = 'none';
+              e.target.parentElement.style.background = `linear-gradient(135deg, ${cl.accent}22 0%, ${cl.bg} 100%)`;
+            }}
+          />
           <div className="absolute inset-0"
-            style={{ background: `linear-gradient(to top, ${cl.bg}ff 0%, ${cl.bg}88 40%, transparent 100%)` }} />
+            style={{ background: `linear-gradient(to top, ${cl.bg}dd 0%, ${cl.bg}66 40%, transparent 100%)` }} />
           <div className="absolute top-3 right-3 px-2 py-0.5 rounded-full text-xs font-bold z-10"
             style={{ background: `${cl.accent}33`, color: cl.accent, border: `1px solid ${cl.accent}55` }}>
             ← flip
