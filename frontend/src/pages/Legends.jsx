@@ -244,7 +244,9 @@ const TiltCard = ({ legend, spinTrigger, direction }) => {
         <div ref={front} className="absolute inset-0">
           <img src={cl.image} alt={cl.name}
             className="w-full h-full object-cover object-top scale-110"
-            referrerPolicy="no-referrer" />
+            referrerPolicy="no-referrer"
+            loading="eager"
+            fetchPriority="high" />
           <div className="absolute inset-0"
             style={{ background: `linear-gradient(to top, ${cl.bg}ff 0%, ${cl.bg}88 40%, transparent 100%)` }} />
         </div>
@@ -253,7 +255,8 @@ const TiltCard = ({ legend, spinTrigger, direction }) => {
         <div ref={back} className="absolute inset-0" style={{ opacity: 0 }}>
           <img src={cl.image2 || cl.image} alt={`${cl.name} alt`}
             className="w-full h-full object-cover object-top scale-110"
-            referrerPolicy="no-referrer" />
+            referrerPolicy="no-referrer"
+            loading="eager" />
           <div className="absolute inset-0"
             style={{ background: `linear-gradient(to top, ${cl.bg}ff 0%, ${cl.bg}88 40%, transparent 100%)` }} />
           <div className="absolute top-3 right-3 px-2 py-0.5 rounded-full text-xs font-bold z-10"
@@ -449,6 +452,14 @@ const Legends = () => {
 
   const legend = legends[current];
 
+  // Preload all legend images on mount so they're ready when user arrives
+  useEffect(() => {
+    legends.forEach(l => {
+      if (l.image)  { const img = new Image(); img.src = l.image;  }
+      if (l.image2) { const img = new Image(); img.src = l.image2; }
+    });
+  }, []);
+
   // Load image overrides from DB and merge into defaults
   useEffect(() => {
     getLegendImages()
@@ -458,11 +469,15 @@ const Legends = () => {
           prev.map(l => {
             const override = data.find(d => d.legendId === l.id);
             if (!override) return l;
-            return {
+            const updated = {
               ...l,
               ...(override.image  ? { image:  override.image  } : {}),
               ...(override.image2 ? { image2: override.image2 } : {}),
             };
+            // Preload the override images immediately
+            if (override.image)  { const img = new Image(); img.src = override.image;  }
+            if (override.image2) { const img = new Image(); img.src = override.image2; }
+            return updated;
           })
         );
       })
