@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import useAuth from '../hooks/useAuth';
 import F1ParticleCanvas from '../components/F1ParticleCanvas';
 import AnimatedText from '../components/AnimatedText';
+import RaceCountdownWidget from '../components/RaceCountdownWidget';
 
 const ChampionshipDashboard = () => {
   const { isAdmin } = useAuth();
@@ -73,6 +74,9 @@ const ChampionshipDashboard = () => {
             Manage drivers, teams, and track every point of the season
           </p>
         </motion.div>
+
+        {/* Live Grand Prix Weekend Countdown & Weather Widget */}
+        <RaceCountdownWidget />
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {cards.map((card, idx) => {

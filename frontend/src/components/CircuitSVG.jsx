@@ -149,14 +149,13 @@ const CircuitSVG = ({ circuitName, animate = false, className = '' }) => {
   // Compute a stroke width that's proportional to the viewBox size
   // so it looks consistent regardless of coordinate space
   const [, , vbW, vbH] = svgData.viewBox.split(' ').map(Number);
-  const vbSize   = Math.max(vbW || 500, vbH || 400);
-  const trackW   = vbSize * 0.022;   // ~2.2% of viewBox — asphalt
-  const glowW    = vbSize * 0.038;   // outer glow halo
-  const racingW  = vbSize * 0.008;   // thin red racing line
+    const vbSize   = Math.max(vbW || 500, vbH || 400);
+  const trackW   = vbSize * 0.024;   // ~2.4% of viewBox — asphalt
+  const glowW    = vbSize * 0.042;   // outer glow halo
+  const racingW  = vbSize * 0.010;   // racing line
 
   return (
-    // overflow:hidden on wrapper prevents glow from bleeding outside card
-    <div className={`${className}`} style={{ overflow: 'hidden' }}>
+    <div className={`${className}`} style={{ overflow: 'hidden', position: 'relative' }}>
       <svg
         ref={svgRef}
         viewBox={svgData.viewBox}
@@ -166,42 +165,60 @@ const CircuitSVG = ({ circuitName, animate = false, className = '' }) => {
         style={{ display: 'block' }}
       >
         <defs>
-          <filter id={`glow-${uid}`} x="-25%" y="-25%" width="150%" height="150%">
-            <feGaussianBlur stdDeviation={vbSize * 0.004} result="blur" />
+          {/* Neon Glow Filter */}
+          <filter id={`glow-${uid}`} x="-30%" y="-30%" width="160%" height="160%">
+            <feGaussianBlur stdDeviation={vbSize * 0.005} result="blur" />
             <feMerge>
               <feMergeNode in="blur" />
               <feMergeNode in="SourceGraphic" />
             </feMerge>
           </filter>
+
+          {/* Speed Telemetry Gradient (Green Throttle -> Cyan Cornering -> Red Heavy Braking) */}
+          <linearGradient id={`telemetry-grad-${uid}`} x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#00e676" />
+            <stop offset="35%" stopColor="#00e5ff" />
+            <stop offset="65%" stopColor="#E10600" />
+            <stop offset="100%" stopColor="#00e676" />
+          </linearGradient>
         </defs>
 
         {svgData.paths.map((d, i) => (
           <g key={i}>
-            {/* Outer red glow */}
-            <path d={d} fill="none"
-              stroke="rgba(225,6,0,0.18)"
+            {/* Outer red/telemetry glow */}
+            <path
+              d={d}
+              fill="none"
+              stroke="rgba(225, 6, 0, 0.22)"
               strokeWidth={glowW}
-              strokeLinecap="round" strokeLinejoin="round"
+              strokeLinecap="round"
+              strokeLinejoin="round"
             />
             {/* Dark asphalt track */}
-            <path d={d} fill="none"
-              stroke="#222"
+            <path
+              d={d}
+              fill="none"
+              stroke="#18181c"
               strokeWidth={trackW}
-              strokeLinecap="round" strokeLinejoin="round"
+              strokeLinecap="round"
+              strokeLinejoin="round"
             />
             {/* Subtle kerb dashes */}
-            <path d={d} fill="none"
-              stroke="rgba(255,255,255,0.07)"
+            <path
+              d={d}
+              fill="none"
+              stroke="rgba(255, 255, 255, 0.12)"
               strokeWidth={trackW}
-              strokeLinecap="round" strokeLinejoin="round"
-              strokeDasharray={`${vbSize * 0.006} ${vbSize * 0.018}`}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeDasharray={`${vbSize * 0.008} ${vbSize * 0.022}`}
             />
-            {/* Animated racing line — pathLength="1" normalises dashoffset */}
+            {/* Dynamic Telemetry Racing line */}
             <path
               className="rl"
               d={d}
               fill="none"
-              stroke="#E10600"
+              stroke={`url(#telemetry-grad-${uid})`}
               strokeWidth={racingW}
               strokeLinecap="round"
               strokeLinejoin="round"

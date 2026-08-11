@@ -177,3 +177,47 @@ img {
   transition: opacity 0.3s;
 }
 
+/* Carbon fiber woven pattern */
+.carbon-panel {
+  background: 
+    linear-gradient(27deg, #121216 5px, transparent 5px) 0 5px,
+    linear-gradient(207deg, #121216 5px, transparent 5px) 10px 0px,
+    linear-gradient(27deg, #1a1a20 5px, transparent 5px) 0px 10px,
+    linear-gradient(207deg, #1a1a20 5px, transparent 5px) 10px 5px,
+    linear-gradient(90deg, #0f0f13 10px, transparent 10px),
+    linear-gradient(#15151a 25%, #0a0a0d 25%, #0a0a0d 50%, transparent 50%, transparent 75%, #181820 75%, #181820);
+  background-size: 20px 20px;
+}
+
+.carbon-border {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1), 0 10px 30px rgba(0, 0, 0, 0.5);
+}
+
+/* Team Livery Neon Glow Accents */
+.glow-ferrari {
+  box-shadow: 0 0 25px rgba(232, 0, 45, 0.25);
+  border-color: rgba(232, 0, 45, 0.45);
+}
+
+.glow-mclaren {
+  box-shadow: 0 0 25px rgba(255, 128, 0, 0.25);
+  border-color: rgba(255, 128, 0, 0.45);
+}
+
+.glow-redbull {
+  box-shadow: 0 0 25px rgba(54, 113, 198, 0.25);
+  border-color: rgba(54, 113, 198, 0.45);
+}
+
+.glow-mercedes {
+  box-shadow: 0 0 25px rgba(39, 244, 210, 0.25);
+  border-color: rgba(39, 244, 210, 0.45);
+}
+
+.glow-aston {
+  box-shadow: 0 0 25px rgba(34, 153, 113, 0.25);
+  border-color: rgba(34, 153, 113, 0.45);
+}
+
+

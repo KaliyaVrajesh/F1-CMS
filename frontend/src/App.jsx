@@ -21,10 +21,10 @@ import EditRaceResults from './pages/EditRaceResults';
 import CircuitsMap from './pages/CircuitsMap';
 import Legends from './pages/Legends';
 import LiquidHero from './pages/LiquidHero';
-import LiquidHeroConfigurable from './pages/LiquidHeroConfigurable';
 import PrivateRoute from './components/PrivateRoute';
 import AdminRoute from './components/AdminRoute';
 import LoadingScreen from './components/LoadingScreen';
+import AerodynamicCursor from './components/AerodynamicCursor';
 
 // Legend images to preload
 const LEGEND_IMAGES = [
@@ -146,6 +146,7 @@ function AppContent() {
 
   return (
     <>
+      <AerodynamicCursor />
       <LoadingScreen isLoading={isLoading} loadPercent={loadPercent} />
       <Routes>
         {/* Liquid Hero - Full screen, no layout */}

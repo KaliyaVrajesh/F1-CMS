@@ -8,6 +8,7 @@ import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { RedBullScene, McLarenScene } from '../components/F1CarScene';
 import TopographicFlowCanvas from '../components/TopographicFlowCanvas';
+import TelemetryHUD from '../components/TelemetryHUD';
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -343,6 +344,9 @@ function LiquidHero({ onScrollDown }) {
             style={{ color: '#111' }}>The pinnacle of motorsport</p>
         </div>
       </div>
+
+      {/* Live Telemetry Cockpit HUD */}
+      <TelemetryHUD />
 
       {/* Hint */}
       <motion.div
