@@ -80,15 +80,18 @@ function AppContent() {
     });
   }, []);
 
+  const isHomeRoute = location.pathname === '/' || location.pathname === '';
+
   // Track 3D GLB model readiness: wait until all 3D assets are 100% loaded and parsed
   useEffect(() => {
-    if (glbProgress >= 100 && !active) {
+    if (glbProgress >= 100 && !active && (total > 0 || !isHomeRoute)) {
       setGlbReady(true);
-    } else if (!active && total === 0) {
-      // If no 3D models to load on current route
-      setGlbReady(true);
+    } else if (!isHomeRoute && !active && total === 0) {
+      // Non-3D routes can mark ready after a brief tick
+      const t = setTimeout(() => setGlbReady(true), 600);
+      return () => clearTimeout(t);
     }
-  }, [glbProgress, active, total]);
+  }, [glbProgress, active, total, isHomeRoute]);
 
   // Window load event ensuring DOM and layout are ready
   useEffect(() => {

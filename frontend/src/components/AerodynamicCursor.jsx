@@ -132,12 +132,12 @@ export default function AerodynamicCursor() {
     <>
       <canvas
         ref={canvasRef}
-        className="fixed inset-0 pointer-events-none z-[9998]"
+        className="fixed inset-0 pointer-events-none z-40"
         style={{ width: '100vw', height: '100vh' }}
       />
       <div
         ref={cursorDotRef}
-        className="fixed top-0 left-0 pointer-events-none z-[9999] transition-all duration-75"
+        className="fixed top-0 left-0 pointer-events-none z-50 transition-all duration-75"
         style={{
           width: isHovering ? '28px' : '8px',
           height: isHovering ? '28px' : '8px',

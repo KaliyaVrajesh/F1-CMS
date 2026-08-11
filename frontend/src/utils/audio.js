@@ -1,8 +1,5 @@
-// ─── Web Audio API F1 Sound Engine ──────────────────────────────────────────
-// Synthesizes crisp, responsive audio cues in real-time (0KB external asset load).
-
 let audioCtx = null;
-let isMuted = localStorage.getItem('f1_audio_muted') === 'true';
+let isMuted = localStorage.getItem('f1_audio_muted') !== 'false'; // Default to true (muted)
 
 function getAudioContext() {
   if (typeof window === 'undefined') return null;
