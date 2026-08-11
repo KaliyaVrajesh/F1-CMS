@@ -148,22 +148,20 @@ function LiquidHero({ onScrollDown }) {
     return () => window.removeEventListener('mousemove', fn);
   }, []);
 
-  /* Hyper-fluent viscous liquid reveal engine */
+  /* Authentic Lando Norris Fluid Lens Engine */
   useEffect(() => {
     aliveRef.current = true;
     const mclaren = mclarenRef.current;
     if (!mclaren) return;
 
-    // Chain of 12 fluid nodes for organic teardrop / wake dynamics
-    const NUM_NODES = 12;
-    const nodes = Array.from({ length: NUM_NODES }, () => ({
-      x: -500,
-      y: -500,
-      vx: 0,
-      vy: 0,
-    }));
+    // 3 Large-scale cohesive fluid nodes: Core Lens, Viscous Body, Trail Droplet
+    const nodes = [
+      { x: -999, y: -999, vx: 0, vy: 0, baseR: 215, weight: 1.0 },   // Main Lens
+      { x: -999, y: -999, vx: 0, vy: 0, baseR: 150, weight: 0.72 },  // Secondary Body
+      { x: -999, y: -999, vx: 0, vy: 0, baseR: 90,  weight: 0.44 },  // Tertiary Tail
+    ];
 
-    const target = { x: -500, y: -500 };
+    const target = { x: -999, y: -999 };
     let lastMoveTime = 0;
     let globalScale = 0;
     let time = 0;
@@ -175,69 +173,78 @@ function LiquidHero({ onScrollDown }) {
     };
     window.addEventListener('mousemove', onMove, { passive: true });
 
-    const IDLE_TIMEOUT = 380; // ms of inactivity before graceful retreat
+    const IDLE_TIMEOUT = 750; // Generous window to comfortably explore underneath
 
     const tick = () => {
       if (!aliveRef.current) return;
       time += 1;
 
       const idle = Date.now() - lastMoveTime > IDLE_TIMEOUT;
-      // Viscous expansion & contraction
-      globalScale += idle ? -0.045 : 0.07;
-      globalScale = Math.max(0, Math.min(1, globalScale));
+      // Smooth exponential scale easing
+      if (idle) {
+        globalScale += (0 - globalScale) * 0.04;
+      } else {
+        globalScale += (1 - globalScale) * 0.10;
+      }
 
-      if (globalScale <= 0.001) {
+      if (globalScale <= 0.005) {
         mclaren.style.opacity = '0';
         rafRef.current = requestAnimationFrame(tick);
         return;
       }
       mclaren.style.opacity = '1';
 
-      // Head node spring physics towards cursor
+      // Core Lens (Node 0) spring follow
       const head = nodes[0];
-      head.vx += (target.x - head.x) * 0.16;
-      head.vy += (target.y - head.y) * 0.16;
-      head.vx *= 0.74;
-      head.vy *= 0.74;
+      head.vx += (target.x - head.x) * 0.12;
+      head.vy += (target.y - head.y) * 0.12;
+      head.vx *= 0.78;
+      head.vy *= 0.78;
       head.x += head.vx;
       head.y += head.vy;
 
       const speed = Math.sqrt(head.vx * head.vx + head.vy * head.vy);
 
-      // Trailing nodes viscous elastic chain
-      for (let i = 1; i < NUM_NODES; i++) {
-        const prev = nodes[i - 1];
-        const curr = nodes[i];
-        const tension = 0.38 - (i / NUM_NODES) * 0.12;
-        curr.vx += (prev.x - curr.x) * tension;
-        curr.vy += (prev.y - curr.y) * tension;
-        curr.vx *= 0.68;
-        curr.vy *= 0.68;
-        curr.x += curr.vx;
-        curr.y += curr.vy;
-      }
+      // Node 1 (Secondary Body)
+      const n1 = nodes[1];
+      n1.vx += (head.x - n1.x) * 0.16;
+      n1.vy += (head.y - n1.y) * 0.16;
+      n1.vx *= 0.70;
+      n1.vy *= 0.70;
+      n1.x += n1.vx;
+      n1.y += n1.vy;
 
-      // Base radius with speed expansion and breathing oscillation
-      const breathe = Math.sin(time * 0.06) * 3;
-      const baseR = (115 + Math.min(65, speed * 4.2) + breathe) * globalScale;
+      // Node 2 (Tertiary Tail)
+      const n2 = nodes[2];
+      n2.vx += (n1.x - n2.x) * 0.18;
+      n2.vy += (n1.y - n2.y) * 0.18;
+      n2.vx *= 0.65;
+      n2.vy *= 0.65;
+      n2.x += n2.vx;
+      n2.y += n2.vy;
 
-      let circles = '';
-      for (let i = 0; i < NUM_NODES; i++) {
-        const n = nodes[i];
-        const taper = 1 - Math.pow(i / NUM_NODES, 1.2) * 0.65;
-        const r = Math.max(8, baseR * taper);
-        circles += `<circle cx='${n.x.toFixed(1)}' cy='${n.y.toFixed(1)}' r='${r.toFixed(1)}'/>`;
-      }
+      // Organic fluid breathing & dynamic velocity expansion
+      const breathe = Math.sin(time * 0.05) * 4.5;
+      const speedExpansion = Math.min(85, speed * 5.0);
+
+      const r0 = Math.max(10, (nodes[0].baseR + speedExpansion + breathe) * globalScale);
+      const r1 = Math.max(8, (nodes[1].baseR + speedExpansion * 0.6 + breathe * 0.7) * globalScale);
+      const r2 = Math.max(6, (nodes[2].baseR + speedExpansion * 0.3 + breathe * 0.4) * globalScale);
+
+      const circles =
+        `<circle cx='${head.x.toFixed(1)}' cy='${head.y.toFixed(1)}' r='${r0.toFixed(1)}'/>` +
+        `<circle cx='${n1.x.toFixed(1)}' cy='${n1.y.toFixed(1)}' r='${r1.toFixed(1)}'/>` +
+        `<circle cx='${n2.x.toFixed(1)}' cy='${n2.y.toFixed(1)}' r='${r2.toFixed(1)}'/>`;
 
       const W = window.innerWidth;
       const H = window.innerHeight;
 
-      // Ultra-lightweight raw UTF-8 SVG string (zero btoa overhead)
+      // High-resolution SVG metaball filter
       const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='${W}' height='${H}'>` +
         `<defs>` +
-          `<filter id='goo' x='-20%' y='-20%' width='140%' height='140%'>` +
-            `<feGaussianBlur in='SourceGraphic' stdDeviation='16' result='blur'/>` +
-            `<feColorMatrix in='blur' mode='matrix' values='1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 32 -11' result='goo'/>` +
+          `<filter id='goo' x='-25%' y='-25%' width='150%' height='150%'>` +
+            `<feGaussianBlur in='SourceGraphic' stdDeviation='24' result='blur'/>` +
+            `<feColorMatrix in='blur' mode='matrix' values='1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 35 -12' result='goo'/>` +
             `<feBlend in='SourceGraphic' in2='goo'/>` +
           `</filter>` +
         `</defs>` +
