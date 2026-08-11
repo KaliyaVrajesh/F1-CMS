@@ -113,20 +113,32 @@ const TiltCard = ({ legend, spinTrigger, direction }) => {
   const cardRef  = useRef(null);
   const front    = useRef(null);
   const back     = useRef(null);
+  const imgRef   = useRef(null);
+  const img2Ref  = useRef(null);
   const shineRef = useRef(null);
   const glowRef  = useRef(null);
   const rafRef   = useRef(null);
-  // Track current displayed legend inside the card (lags behind by half a spin)
-  const displayedLegend = useRef(legend);
+  const isInitialMount = useRef(true);
   const [cardLegend, setCardLegend] = useState(legend);
   // Track which images have loaded successfully (persists across legend changes)
   const loadedImagesRef = useRef(new Set());
   const [, forceUpdate] = useState(0);
   const isSpinning = useRef(false);
 
+  // Sync card legend if parent prop updates (e.g. database image overrides)
+  useEffect(() => {
+    if (!isSpinning.current) {
+      setCardLegend(legend);
+    }
+  }, [legend]);
+
   // ── Spin animation on legend change ──────────────────────────────────────
   useEffect(() => {
     if (!cardRef.current) return;
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
+      return;
+    }
     if (isSpinning.current) return;
     isSpinning.current = true;
 
@@ -134,7 +146,6 @@ const TiltCard = ({ legend, spinTrigger, direction }) => {
     const halfDur = 0.32;
 
     // Phase 1: rotate 0 → ±90° AND fade image out simultaneously
-    // so the old driver is invisible before the card even reaches edge-on
     gsap.to(cardRef.current, {
       rotateY: spinDir * 90,
       duration: halfDur,
@@ -142,21 +153,17 @@ const TiltCard = ({ legend, spinTrigger, direction }) => {
     });
     gsap.to([front.current, back.current], {
       opacity: 0,
-      duration: halfDur * 0.6, // fade out faster than the rotation
+      duration: halfDur * 0.6,
       ease: 'power1.in',
       onComplete() {
-        // Swap content while everything is invisible
         setCardLegend({ ...legend });
         gsap.set(front.current, { opacity: 0 });
         gsap.set(back.current,  { opacity: 0 });
         if (shineRef.current) shineRef.current.style.background = 'none';
 
-        // Wait for Phase 1 rotation to fully complete, then start Phase 2
         gsap.delayedCall(halfDur * 0.4, () => {
-          // Jump to opposite edge
           gsap.set(cardRef.current, { rotateY: -spinDir * 90 });
 
-          // Phase 2: rotate ∓90° → 0° AND fade new content in
           gsap.to(cardRef.current, {
             rotateY: 0,
             duration: halfDur,
@@ -165,7 +172,7 @@ const TiltCard = ({ legend, spinTrigger, direction }) => {
           gsap.to(front.current, {
             opacity: 1,
             duration: halfDur * 0.7,
-            delay: halfDur * 0.3, // start fading in after card starts returning
+            delay: halfDur * 0.3,
             ease: 'power1.out',
             onComplete() {
               isSpinning.current = false;
@@ -226,16 +233,32 @@ const TiltCard = ({ legend, spinTrigger, direction }) => {
 
   const cl = cardLegend;
 
-  // Check if current image is loaded
-  const isImageLoaded = loadedImagesRef.current.has(cl.image);
-  const isImage2Loaded = loadedImagesRef.current.has(cl.image2);
+  // Immediate detection for cached/completed images
+  useEffect(() => {
+    if (imgRef.current?.complete && imgRef.current?.naturalWidth > 0) {
+      if (!loadedImagesRef.current.has(cl.image)) {
+        loadedImagesRef.current.add(cl.image);
+        forceUpdate(n => n + 1);
+      }
+    }
+    if (img2Ref.current?.complete && img2Ref.current?.naturalWidth > 0) {
+      if (!loadedImagesRef.current.has(cl.image2)) {
+        loadedImagesRef.current.add(cl.image2);
+        forceUpdate(n => n + 1);
+      }
+    }
+  }, [cl.image, cl.image2]);
+
+  // Check if current image is loaded or already complete in DOM
+  const isImageLoaded = loadedImagesRef.current.has(cl.image) || (imgRef.current?.complete && imgRef.current?.naturalWidth > 0);
+  const isImage2Loaded = loadedImagesRef.current.has(cl.image2) || (img2Ref.current?.complete && img2Ref.current?.naturalWidth > 0);
 
   // Handler for image load success - persists across legend changes
   const handleImageLoad = (e) => {
     const src = e.target.src;
     if (!loadedImagesRef.current.has(src)) {
       loadedImagesRef.current.add(src);
-      forceUpdate(n => n + 1); // Force re-render to show loaded image
+      forceUpdate(n => n + 1);
     }
   };
 
@@ -243,9 +266,6 @@ const TiltCard = ({ legend, spinTrigger, direction }) => {
   const handleImageError = (e) => {
     console.warn(`Failed to load image for ${cl.name}:`, e.target.src);
   };
-
-  // Check if image failed to load (not preloaded and not in cache)
-  const imageError = !isImageLoaded;
 
   return (
     <div ref={wrapRef} style={{ perspective: '900px' }} className="flex justify-center">
@@ -265,34 +285,21 @@ const TiltCard = ({ legend, spinTrigger, direction }) => {
           style={{ background: `radial-gradient(circle, ${cl.accent}35 0%, transparent 70%)`, filter: 'blur(28px)', zIndex: 1 }} />
 
         {/* FRONT face */}
-        <div ref={front} className="absolute inset-0" style={{ background: !isImageLoaded ? `linear-gradient(135deg, ${cl.accent}15 0%, ${cl.bg} 100%)` : 'transparent' }}>
+        <div ref={front} className="absolute inset-0" style={{ opacity: 1, background: !isImageLoaded ? `linear-gradient(135deg, ${cl.accent}15 0%, ${cl.bg} 100%)` : 'transparent' }}>
           <img 
+            ref={imgRef}
             src={cl.image} 
             alt={cl.name}
             className="w-full h-full object-cover object-top scale-110"
             style={{ 
-              opacity: isImageLoaded ? 1 : 0,
-              transition: 'opacity 0.5s ease-in-out',
+              opacity: isImageLoaded ? 1 : 0.85,
+              transition: 'opacity 0.3s ease-in-out',
             }}
             onLoad={handleImageLoad}
             onError={handleImageError}
             loading="eager"
             decoding="async"
           />
-          
-          {/* Show fallback only if image truly failed (after reasonable wait) */}
-          {!isImageLoaded && (
-            <div className="absolute inset-0 flex items-center justify-center">
-              <div className="text-center">
-                <div className="text-9xl font-f1heading font-black opacity-20 mb-4" style={{ color: cl.accent }}>
-                  {cl.number}
-                </div>
-                <div className="text-xs text-gray-600 uppercase tracking-widest animate-pulse">
-                  Loading...
-                </div>
-              </div>
-            </div>
-          )}
           
           {/* Gradient overlay - lighter to show images better */}
           <div className="absolute inset-0 pointer-events-none"
@@ -302,12 +309,13 @@ const TiltCard = ({ legend, spinTrigger, direction }) => {
         {/* BACK face */}
         <div ref={back} className="absolute inset-0" style={{ opacity: 0, background: !isImage2Loaded ? `linear-gradient(135deg, ${cl.accent}15 0%, ${cl.bg} 100%)` : 'transparent' }}>
           <img 
+            ref={img2Ref}
             src={cl.image2 || cl.image} 
             alt={`${cl.name} back`}
             className="w-full h-full object-cover object-top scale-110"
             style={{ 
-              opacity: isImage2Loaded ? 1 : 0,
-              transition: 'opacity 0.5s ease-in-out',
+              opacity: isImage2Loaded ? 1 : 0.85,
+              transition: 'opacity 0.3s ease-in-out',
             }}
             onLoad={handleImageLoad}
             onError={handleImageError}

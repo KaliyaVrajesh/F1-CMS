@@ -236,12 +236,23 @@ const CircuitsMap = () => {
     if (season) fetchRaces(season);
   }, [season, fetchRaces]);
 
+  // Track last animated season to only trigger staggered reveal on new season load
+  const lastAnimatedSeason = useRef(null);
+
   // ── Staggered globe dot reveal ────────────────────────────────────────────
   useEffect(() => {
+    if (races.length === 0) {
+      setVisible(0);
+      return;
+    }
+    // Only re-stagger if season changed or initial load
+    if (lastAnimatedSeason.current === season && visibleCount === races.length) {
+      return;
+    }
+    lastAnimatedSeason.current = season;
     setVisible(0);
     if (revealTimer.current) clearInterval(revealTimer.current);
     const total = races.length;
-    if (total === 0) return;
     const interval = Math.min(900 / total, 80);
     let count = 0;
     revealTimer.current = setInterval(() => {
@@ -250,7 +261,7 @@ const CircuitsMap = () => {
       if (count >= total) clearInterval(revealTimer.current);
     }, interval);
     return () => clearInterval(revealTimer.current);
-  }, [races]);
+  }, [races.length, season, visibleCount]);
 
   // ── Lazy-load podium when a race is pinned ────────────────────────────────
   useEffect(() => {
