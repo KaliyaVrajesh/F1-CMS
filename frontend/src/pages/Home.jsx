@@ -148,115 +148,109 @@ function LiquidHero({ onScrollDown }) {
     return () => window.removeEventListener('mousemove', fn);
   }, []);
 
-  /* Liquid reveal engine */
+  /* Hyper-fluent viscous liquid reveal engine */
   useEffect(() => {
     aliveRef.current = true;
     const mclaren = mclarenRef.current;
     if (!mclaren) return;
 
-    const s = spring.current;
-    s.x = -300; s.y = -300; s.vx = 0; s.vy = 0; s.tx = -300; s.ty = -300;
+    // Chain of 12 fluid nodes for organic teardrop / wake dynamics
+    const NUM_NODES = 12;
+    const nodes = Array.from({ length: NUM_NODES }, () => ({
+      x: -500,
+      y: -500,
+      vx: 0,
+      vy: 0,
+    }));
 
-    let lastMoveTime = 0;          // timestamp of last mousemove
-    let globalScale  = 0;          // 0 = fully hidden, 1 = fully visible
+    const target = { x: -500, y: -500 };
+    let lastMoveTime = 0;
+    let globalScale = 0;
+    let time = 0;
 
     const onMove = (e) => {
-      s.tx = e.clientX;
-      s.ty = e.clientY;
+      target.x = e.clientX;
+      target.y = e.clientY;
       lastMoveTime = Date.now();
     };
-    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mousemove', onMove, { passive: true });
 
-    // Trail: array of {x, y, r, age} — older points shrink
-    const trail = trailRef.current;
-    trail.length = 0;
-    let lastTrailX = -9999, lastTrailY = -9999;
-
-    const IDLE_MS = 300; // ms of no movement before blob starts shrinking
+    const IDLE_TIMEOUT = 380; // ms of inactivity before graceful retreat
 
     const tick = () => {
       if (!aliveRef.current) return;
+      time += 1;
 
-      // Fade globalScale in/out based on mouse activity
-      const idle = Date.now() - lastMoveTime > IDLE_MS;
-      globalScale += idle ? -0.06 : 0.08;
-      globalScale  = Math.max(0, Math.min(1, globalScale));
+      const idle = Date.now() - lastMoveTime > IDLE_TIMEOUT;
+      // Viscous expansion & contraction
+      globalScale += idle ? -0.045 : 0.07;
+      globalScale = Math.max(0, Math.min(1, globalScale));
 
-      // Spring physics — smooth lag behind cursor
-      s.vx += (s.tx - s.x) * 0.09;
-      s.vy += (s.ty - s.y) * 0.09;
-      s.vx *= 0.78;
-      s.vy *= 0.78;
-      s.x  += s.vx;
-      s.y  += s.vy;
-
-      // Add trail point when spring head moves enough
-      const dx = s.x - lastTrailX;
-      const dy = s.y - lastTrailY;
-      if (Math.sqrt(dx * dx + dy * dy) > 12) {
-        trail.push({ x: s.x, y: s.y, r: 1.0, age: 0 });
-        lastTrailX = s.x;
-        lastTrailY = s.y;
-        if (trail.length > 18) trail.shift();
-      }
-
-      // Age trail points
-      for (const p of trail) p.age += 0.025;
-
-      // Hide McLaren layer entirely when fully faded out (so Red Bull shows through)
-      if (globalScale <= 0) {
+      if (globalScale <= 0.001) {
         mclaren.style.opacity = '0';
         rafRef.current = requestAnimationFrame(tick);
         return;
       }
       mclaren.style.opacity = '1';
 
-      const speed = Math.sqrt(s.vx * s.vx + s.vy * s.vy);
-      // Reduced base size (was 130), scaled by globalScale for fade in/out
-      const baseR = Math.min(160, 90 + speed * 6) * globalScale;
+      // Head node spring physics towards cursor
+      const head = nodes[0];
+      head.vx += (target.x - head.x) * 0.16;
+      head.vy += (target.y - head.y) * 0.16;
+      head.vx *= 0.74;
+      head.vy *= 0.74;
+      head.x += head.vx;
+      head.y += head.vy;
 
-      // Build a smooth SVG clip path using ellipses merged via feBlend
-      // Actually: use a single clip-path with multiple circles via SVG clipPath
-      // The browser merges overlapping clip regions automatically → organic shape
+      const speed = Math.sqrt(head.vx * head.vx + head.vy * head.vy);
 
-      // Generate SVG clipPath string
+      // Trailing nodes viscous elastic chain
+      for (let i = 1; i < NUM_NODES; i++) {
+        const prev = nodes[i - 1];
+        const curr = nodes[i];
+        const tension = 0.38 - (i / NUM_NODES) * 0.12;
+        curr.vx += (prev.x - curr.x) * tension;
+        curr.vy += (prev.y - curr.y) * tension;
+        curr.vx *= 0.68;
+        curr.vy *= 0.68;
+        curr.x += curr.vx;
+        curr.y += curr.vy;
+      }
+
+      // Base radius with speed expansion and breathing oscillation
+      const breathe = Math.sin(time * 0.06) * 3;
+      const baseR = (115 + Math.min(65, speed * 4.2) + breathe) * globalScale;
+
       let circles = '';
-      // Main head circle
-      circles += `<circle cx="${s.x.toFixed(1)}" cy="${s.y.toFixed(1)}" r="${baseR.toFixed(1)}"/>`;
-      // Trail circles — decreasing size
-      for (let i = trail.length - 1; i >= 0; i--) {
-        const p = trail[i];
-        const age = trail.length - 1 - i; // 0 = newest
-        const maxAge = trail.length;
-        const t = age / maxAge;
-        const r = baseR * (1 - t * 0.65) * Math.max(0, 1 - p.age * 0.4);
-        if (r < 5) continue;
-        circles += `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="${r.toFixed(1)}"/>`;
+      for (let i = 0; i < NUM_NODES; i++) {
+        const n = nodes[i];
+        const taper = 1 - Math.pow(i / NUM_NODES, 1.2) * 0.65;
+        const r = Math.max(8, baseR * taper);
+        circles += `<circle cx='${n.x.toFixed(1)}' cy='${n.y.toFixed(1)}' r='${r.toFixed(1)}'/>`;
       }
 
       const W = window.innerWidth;
       const H = window.innerHeight;
 
-      // SVG with feMorphology to smooth/merge the circles
-      const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}">
-        <defs>
-          <filter id="blob" x="-30%" y="-30%" width="160%" height="160%">
-            <feGaussianBlur in="SourceGraphic" stdDeviation="18" result="blur"/>
-            <feColorMatrix in="blur" mode="matrix"
-              values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 28 -10"
-              result="goo"/>
-          </filter>
-        </defs>
-        <g filter="url(#blob)" fill="white">${circles}</g>
-      </svg>`;
+      // Ultra-lightweight raw UTF-8 SVG string (zero btoa overhead)
+      const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='${W}' height='${H}'>` +
+        `<defs>` +
+          `<filter id='goo' x='-20%' y='-20%' width='140%' height='140%'>` +
+            `<feGaussianBlur in='SourceGraphic' stdDeviation='16' result='blur'/>` +
+            `<feColorMatrix in='blur' mode='matrix' values='1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 32 -11' result='goo'/>` +
+            `<feBlend in='SourceGraphic' in2='goo'/>` +
+          `</filter>` +
+        `</defs>` +
+        `<g filter='url(%23goo)' fill='white'>${circles}</g>` +
+      `</svg>`;
 
-      const encoded = 'data:image/svg+xml;base64,' + btoa(svg);
-      mclaren.style.webkitMaskImage = `url("${encoded}")`;
-      mclaren.style.maskImage       = `url("${encoded}")`;
-      mclaren.style.webkitMaskSize  = `${W}px ${H}px`;
-      mclaren.style.maskSize        = `${W}px ${H}px`;
+      const dataUrl = `url("data:image/svg+xml;utf8,${svg}")`;
+      mclaren.style.webkitMaskImage = dataUrl;
+      mclaren.style.maskImage = dataUrl;
+      mclaren.style.webkitMaskSize = `${W}px ${H}px`;
+      mclaren.style.maskSize = `${W}px ${H}px`;
       mclaren.style.webkitMaskRepeat = 'no-repeat';
-      mclaren.style.maskRepeat       = 'no-repeat';
+      mclaren.style.maskRepeat = 'no-repeat';
 
       rafRef.current = requestAnimationFrame(tick);
     };
@@ -267,11 +261,10 @@ function LiquidHero({ onScrollDown }) {
       aliveRef.current = false;
       cancelAnimationFrame(rafRef.current);
       window.removeEventListener('mousemove', onMove);
-      trailRef.current = [];
       if (mclaren) {
-        mclaren.style.opacity         = '0';
+        mclaren.style.opacity = '0';
         mclaren.style.webkitMaskImage = 'none';
-        mclaren.style.maskImage       = 'none';
+        mclaren.style.maskImage = 'none';
       }
     };
   }, []);
