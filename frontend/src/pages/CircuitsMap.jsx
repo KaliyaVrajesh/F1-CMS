@@ -211,6 +211,32 @@ const CircuitsMap = () => {
     setSeason(String(currentYear));
   }, []);
 
+  // ── Staggered globe dot reveal ────────────────────────────────────────────
+  const startDotReveal = useCallback((total) => {
+    if (revealTimer.current) clearInterval(revealTimer.current);
+    if (!total || total === 0) {
+      setVisible(0);
+      return;
+    }
+    setVisible(0);
+    const interval = Math.min(900 / total, 50);
+    let count = 0;
+    revealTimer.current = setInterval(() => {
+      count++;
+      setVisible(count);
+      if (count >= total) {
+        clearInterval(revealTimer.current);
+      }
+    }, interval);
+  }, []);
+
+  // Clean up timer on unmount
+  useEffect(() => {
+    return () => {
+      if (revealTimer.current) clearInterval(revealTimer.current);
+    };
+  }, []);
+
   // ── Load races for selected season from Jolpica ───────────────────────────
   const fetchRaces = useCallback(async (yr) => {
     if (!yr) return;
@@ -218,50 +244,26 @@ const CircuitsMap = () => {
     setRaces([]);
     setPinned(null);
     setHovered(null);
+    setVisible(0);
     try {
       const { data } = await getF1SeasonCircuits(parseInt(yr, 10));
       const normalised = data
         .filter(r => r.lat != null && r.lng != null)
         .map(normaliseRace);
       setRaces(normalised);
+      startDotReveal(normalised.length);
     } catch {
       toast.error(`No circuit data for ${yr}`);
       setRaces([]);
+      setVisible(0);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [startDotReveal]);
 
   useEffect(() => {
     if (season) fetchRaces(season);
   }, [season, fetchRaces]);
-
-  // Track last animated season to only trigger staggered reveal on new season load
-  const lastAnimatedSeason = useRef(null);
-
-  // ── Staggered globe dot reveal ────────────────────────────────────────────
-  useEffect(() => {
-    if (races.length === 0) {
-      setVisible(0);
-      return;
-    }
-    // Only re-stagger if season changed or initial load
-    if (lastAnimatedSeason.current === season && visibleCount === races.length) {
-      return;
-    }
-    lastAnimatedSeason.current = season;
-    setVisible(0);
-    if (revealTimer.current) clearInterval(revealTimer.current);
-    const total = races.length;
-    const interval = Math.min(900 / total, 80);
-    let count = 0;
-    revealTimer.current = setInterval(() => {
-      count++;
-      setVisible(count);
-      if (count >= total) clearInterval(revealTimer.current);
-    }, interval);
-    return () => clearInterval(revealTimer.current);
-  }, [races.length, season, visibleCount]);
 
   // ── Lazy-load podium when a race is pinned ────────────────────────────────
   useEffect(() => {
