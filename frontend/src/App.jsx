@@ -21,6 +21,7 @@ import EditRaceResults from './pages/EditRaceResults';
 import CircuitsMap from './pages/CircuitsMap';
 import Legends from './pages/Legends';
 import LiquidHero from './pages/LiquidHero';
+import LiquidHeroConfigurable from './pages/LiquidHeroConfigurable';
 import PrivateRoute from './components/PrivateRoute';
 import AdminRoute from './components/AdminRoute';
 import LoadingScreen from './components/LoadingScreen';
