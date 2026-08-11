@@ -52,13 +52,12 @@ function AppContent() {
   const [imageProgress, setImageProgress] = useState(0);
 
   // Track Three.js / GLB loading progress via drei's useProgress
-  const { progress: glbProgress, active } = useProgress();
+  const { progress: glbProgress, active, loaded, total } = useProgress();
 
-  // Preload legend images on mount with per-image and overall timeouts
+  // Preload legend images on mount
   useEffect(() => {
     let loadedCount = 0;
     const totalImages = LEGEND_IMAGES.length;
-    let isMounted = true;
 
     if (totalImages === 0) {
       setImagesReady(true);
@@ -67,62 +66,33 @@ function AppContent() {
 
     const checkComplete = () => {
       loadedCount++;
-      if (isMounted) {
-        setImageProgress(Math.floor((loadedCount / totalImages) * 100));
-        if (loadedCount >= totalImages) {
-          setImagesReady(true);
-        }
+      setImageProgress(Math.floor((loadedCount / totalImages) * 100));
+      if (loadedCount >= totalImages) {
+        setImagesReady(true);
       }
     };
 
     LEGEND_IMAGES.forEach(src => {
       const img = new Image();
-      const timer = setTimeout(checkComplete, 1200);
-      img.onload = () => { clearTimeout(timer); checkComplete(); };
-      img.onerror = () => { clearTimeout(timer); checkComplete(); };
+      img.onload = checkComplete;
+      img.onerror = checkComplete;
       img.src = src;
     });
-
-    // Hard fallback: images marked ready within 1.5s max
-    const fallbackTimer = setTimeout(() => {
-      if (isMounted) {
-        setImageProgress(100);
-        setImagesReady(true);
-      }
-    }, 1500);
-
-    return () => {
-      isMounted = false;
-      clearTimeout(fallbackTimer);
-    };
   }, []);
 
-  const [timeProgress, setTimeProgress] = useState(0);
-
-  // Smooth time-based progress ticker to ensure steady progression
+  // Track 3D GLB model readiness: wait until all 3D assets are 100% loaded and parsed
   useEffect(() => {
-    const started = Date.now();
-    const DURATION = 2200;
-    const interval = setInterval(() => {
-      const elapsed = Date.now() - started;
-      const pct = Math.min(100, Math.floor((elapsed / DURATION) * 100));
-      setTimeProgress(pct);
-      if (pct >= 100) clearInterval(interval);
-    }, 30);
-    return () => clearInterval(interval);
-  }, []);
+    if (glbProgress >= 100 && !active) {
+      setGlbReady(true);
+    } else if (!active && total === 0) {
+      // If no 3D models to load on current route
+      setGlbReady(true);
+    }
+  }, [glbProgress, active, total]);
 
+  // Window load event ensuring DOM and layout are ready
   useEffect(() => {
-    // GLBs done when progress hits 100 and loader is no longer active
-    if (glbProgress >= 100 && !active) setGlbReady(true);
-    // Hard fallback: GLBs marked ready within 1.5s max
-    const t = setTimeout(() => setGlbReady(true), 1500);
-    return () => clearTimeout(t);
-  }, [glbProgress, active]);
-
-  // Window load event with guaranteed completion
-  useEffect(() => {
-    const MIN_DURATION = 1800;
+    const MIN_DURATION = 1500;
     const started = Date.now();
 
     const finish = () => {
@@ -135,36 +105,39 @@ function AppContent() {
       finish();
     } else {
       window.addEventListener('load', finish, { once: true });
+      return () => window.removeEventListener('load', finish);
     }
-
-    const fallback = setTimeout(() => setWindowReady(true), 2500);
-    return () => {
-      window.removeEventListener('load', finish);
-      clearTimeout(fallback);
-    };
   }, []);
 
-  // Hide loading screen when resources are ready or timeProgress reaches 100
+  // Micro-ticker for smooth visual feedback while large 3D models download
+  const [downloadTicker, setDownloadTicker] = useState(0);
   useEffect(() => {
-    if ((windowReady && glbReady && imagesReady) || timeProgress >= 100) {
+    if (!glbReady && active) {
+      const interval = setInterval(() => {
+        setDownloadTicker(prev => (prev < 45 ? prev + 1.5 : prev));
+      }, 100);
+      return () => clearInterval(interval);
+    }
+  }, [glbReady, active]);
+
+  // Hide loading screen ONLY when ALL resources (3D cars, images, window) are fully loaded
+  useEffect(() => {
+    if (windowReady && glbReady && imagesReady) {
       setIsLoading(false);
     }
-  }, [windowReady, glbReady, imagesReady, timeProgress]);
+  }, [windowReady, glbReady, imagesReady]);
 
-  // Absolute failsafe: loading screen will NEVER stay longer than 2.8s
-  useEffect(() => {
-    const failsafe = setTimeout(() => {
-      setIsLoading(false);
-    }, 2800);
-    return () => clearTimeout(failsafe);
-  }, []);
+  // Accurate combined progress percentage that reflects true asset loading
+  const baseGlbProgress = glbReady
+    ? 100
+    : total > 0
+    ? Math.min(99, Math.round((loaded / total) * 100 + downloadTicker * (1 / total)))
+    : (active ? downloadTicker : 100);
 
-  // Calculate combined progress percentage for loading screen
-  const effectiveGlb = glbReady ? 100 : glbProgress;
-  const resourceProgress = (effectiveGlb * 0.4) + (imageProgress * 0.3) + (windowReady ? 30 : 0);
+  const resourceProgress = (baseGlbProgress * 0.5) + (imageProgress * 0.3) + (windowReady ? 20 : 0);
   const loadPercent = !isLoading
     ? 100
-    : Math.min(100, Math.round(Math.max(resourceProgress, timeProgress)));
+    : Math.min(100, Math.round(resourceProgress));
 
   // Route changes after first load — no full loading screen
   useEffect(() => {
