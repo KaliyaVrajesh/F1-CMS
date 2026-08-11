@@ -7,6 +7,7 @@ import toast from 'react-hot-toast';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { RedBullScene, McLarenScene } from '../components/F1CarScene';
+import TopographicFlowCanvas from '../components/TopographicFlowCanvas';
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -279,6 +280,7 @@ function LiquidHero({ onScrollDown }) {
 
       {/* ── Layer 1: Red Bull — dark base ── */}
       <div className="absolute inset-0 bg-black" style={{ zIndex: 1 }}>
+        <TopographicFlowCanvas theme="dark" />
         <Canvas camera={CAM} gl={GL} style={{ background: 'transparent' }}>
           <Suspense fallback={null}><RedBullScene mouse={mouse3d} /></Suspense>
         </Canvas>
@@ -324,6 +326,7 @@ function LiquidHero({ onScrollDown }) {
           willChange: 'mask-image, opacity',
         }}
       >
+        <TopographicFlowCanvas theme="orange" />
         <Canvas camera={CAM} gl={GL} style={{ background: 'transparent' }}>
           <Suspense fallback={null}><McLarenScene mouse={mouse3d} /></Suspense>
         </Canvas>
