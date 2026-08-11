@@ -355,6 +355,9 @@ async function getCurrentSeasonCircuits(year = currentYear()) {
     }));
   });
 }
+
+/**
+ * Season list (all years F1 has run) - paginates to get all results.
  */
 async function getAllSeasons() {
   return cachedFetch(longCache, 'allSeasons', async () => {
