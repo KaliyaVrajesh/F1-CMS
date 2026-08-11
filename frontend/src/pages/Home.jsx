@@ -148,116 +148,115 @@ function LiquidHero({ onScrollDown }) {
     return () => window.removeEventListener('mousemove', fn);
   }, []);
 
-  /* Authentic Lando Norris Fluid Lens Engine */
+  /* Liquid reveal engine */
   useEffect(() => {
     aliveRef.current = true;
     const mclaren = mclarenRef.current;
     if (!mclaren) return;
 
-    // 3 Large-scale cohesive fluid nodes: Core Lens, Viscous Body, Trail Droplet
-    const nodes = [
-      { x: -999, y: -999, vx: 0, vy: 0, baseR: 215, weight: 1.0 },   // Main Lens
-      { x: -999, y: -999, vx: 0, vy: 0, baseR: 150, weight: 0.72 },  // Secondary Body
-      { x: -999, y: -999, vx: 0, vy: 0, baseR: 90,  weight: 0.44 },  // Tertiary Tail
-    ];
+    const s = spring.current;
+    s.x = -300; s.y = -300; s.vx = 0; s.vy = 0; s.tx = -300; s.ty = -300;
 
-    const target = { x: -999, y: -999 };
-    let lastMoveTime = 0;
-    let globalScale = 0;
-    let time = 0;
+    let lastMoveTime = 0;          // timestamp of last mousemove
+    let globalScale  = 0;          // 0 = fully hidden, 1 = fully visible
 
     const onMove = (e) => {
-      target.x = e.clientX;
-      target.y = e.clientY;
+      s.tx = e.clientX;
+      s.ty = e.clientY;
       lastMoveTime = Date.now();
     };
-    window.addEventListener('mousemove', onMove, { passive: true });
+    window.addEventListener('mousemove', onMove);
 
-    const IDLE_TIMEOUT = 750; // Generous window to comfortably explore underneath
+    // Trail: array of {x, y, r, age} — older points shrink
+    const trail = trailRef.current;
+    trail.length = 0;
+    let lastTrailX = -9999, lastTrailY = -9999;
+
+    const IDLE_MS = 300; // ms of no movement before blob starts shrinking
 
     const tick = () => {
       if (!aliveRef.current) return;
-      time += 1;
 
-      const idle = Date.now() - lastMoveTime > IDLE_TIMEOUT;
-      // Smooth exponential scale easing
-      if (idle) {
-        globalScale += (0 - globalScale) * 0.04;
-      } else {
-        globalScale += (1 - globalScale) * 0.10;
+      // Fade globalScale in/out based on mouse activity
+      const idle = Date.now() - lastMoveTime > IDLE_MS;
+      globalScale += idle ? -0.06 : 0.08;
+      globalScale  = Math.max(0, Math.min(1, globalScale));
+
+      // Spring physics — smooth lag behind cursor
+      s.vx += (s.tx - s.x) * 0.09;
+      s.vy += (s.ty - s.y) * 0.09;
+      s.vx *= 0.78;
+      s.vy *= 0.78;
+      s.x  += s.vx;
+      s.y  += s.vy;
+
+      // Add trail point when spring head moves enough
+      const dx = s.x - lastTrailX;
+      const dy = s.y - lastTrailY;
+      if (Math.sqrt(dx * dx + dy * dy) > 12) {
+        trail.push({ x: s.x, y: s.y, r: 1.0, age: 0 });
+        lastTrailX = s.x;
+        lastTrailY = s.y;
+        if (trail.length > 18) trail.shift();
       }
 
-      if (globalScale <= 0.005) {
+      // Age trail points
+      for (const p of trail) p.age += 0.025;
+
+      // Hide McLaren layer entirely when fully faded out (so Red Bull shows through)
+      if (globalScale <= 0) {
         mclaren.style.opacity = '0';
         rafRef.current = requestAnimationFrame(tick);
         return;
       }
       mclaren.style.opacity = '1';
 
-      // Core Lens (Node 0) spring follow
-      const head = nodes[0];
-      head.vx += (target.x - head.x) * 0.12;
-      head.vy += (target.y - head.y) * 0.12;
-      head.vx *= 0.78;
-      head.vy *= 0.78;
-      head.x += head.vx;
-      head.y += head.vy;
+      const speed = Math.sqrt(s.vx * s.vx + s.vy * s.vy);
+      // Reduced base size (was 130), scaled by globalScale for fade in/out
+      const baseR = Math.min(160, 90 + speed * 6) * globalScale;
 
-      const speed = Math.sqrt(head.vx * head.vx + head.vy * head.vy);
+      // Build a smooth SVG clip path using ellipses merged via feBlend
+      // Actually: use a single clip-path with multiple circles via SVG clipPath
+      // The browser merges overlapping clip regions automatically → organic shape
 
-      // Node 1 (Secondary Body)
-      const n1 = nodes[1];
-      n1.vx += (head.x - n1.x) * 0.16;
-      n1.vy += (head.y - n1.y) * 0.16;
-      n1.vx *= 0.70;
-      n1.vy *= 0.70;
-      n1.x += n1.vx;
-      n1.y += n1.vy;
-
-      // Node 2 (Tertiary Tail)
-      const n2 = nodes[2];
-      n2.vx += (n1.x - n2.x) * 0.18;
-      n2.vy += (n1.y - n2.y) * 0.18;
-      n2.vx *= 0.65;
-      n2.vy *= 0.65;
-      n2.x += n2.vx;
-      n2.y += n2.vy;
-
-      // Organic fluid breathing & dynamic velocity expansion
-      const breathe = Math.sin(time * 0.05) * 4.5;
-      const speedExpansion = Math.min(85, speed * 5.0);
-
-      const r0 = Math.max(10, (nodes[0].baseR + speedExpansion + breathe) * globalScale);
-      const r1 = Math.max(8, (nodes[1].baseR + speedExpansion * 0.6 + breathe * 0.7) * globalScale);
-      const r2 = Math.max(6, (nodes[2].baseR + speedExpansion * 0.3 + breathe * 0.4) * globalScale);
-
-      const circles =
-        `<circle cx='${head.x.toFixed(1)}' cy='${head.y.toFixed(1)}' r='${r0.toFixed(1)}'/>` +
-        `<circle cx='${n1.x.toFixed(1)}' cy='${n1.y.toFixed(1)}' r='${r1.toFixed(1)}'/>` +
-        `<circle cx='${n2.x.toFixed(1)}' cy='${n2.y.toFixed(1)}' r='${r2.toFixed(1)}'/>`;
+      // Generate SVG clipPath string
+      let circles = '';
+      // Main head circle
+      circles += `<circle cx="${s.x.toFixed(1)}" cy="${s.y.toFixed(1)}" r="${baseR.toFixed(1)}"/>`;
+      // Trail circles — decreasing size
+      for (let i = trail.length - 1; i >= 0; i--) {
+        const p = trail[i];
+        const age = trail.length - 1 - i; // 0 = newest
+        const maxAge = trail.length;
+        const t = age / maxAge;
+        const r = baseR * (1 - t * 0.65) * Math.max(0, 1 - p.age * 0.4);
+        if (r < 5) continue;
+        circles += `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="${r.toFixed(1)}"/>`;
+      }
 
       const W = window.innerWidth;
       const H = window.innerHeight;
 
-      // High-resolution SVG metaball filter
-      const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='${W}' height='${H}'>` +
-        `<defs>` +
-          `<filter id='goo' x='-25%' y='-25%' width='150%' height='150%'>` +
-            `<feGaussianBlur in='SourceGraphic' stdDeviation='24' result='blur'/>` +
-            `<feColorMatrix in='blur' mode='matrix' values='1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 35 -12' result='goo'/>` +
-            `<feBlend in='SourceGraphic' in2='goo'/>` +
-          `</filter>` +
-        `</defs>` +
-        `<g filter='url(%23goo)' fill='white'>${circles}</g>` +
-      `</svg>`;
+      // SVG with feMorphology to smooth/merge the circles
+      const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}">
+        <defs>
+          <filter id="blob" x="-30%" y="-30%" width="160%" height="160%">
+            <feGaussianBlur in="SourceGraphic" stdDeviation="18" result="blur"/>
+            <feColorMatrix in="blur" mode="matrix"
+              values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 28 -10"
+              result="goo"/>
+          </filter>
+        </defs>
+        <g filter="url(#blob)" fill="white">${circles}</g>
+      </svg>`;
 
-      const dataUrl = `url("data:image/svg+xml;utf8,${svg}")`;
-      mclaren.style.webkitMaskImage = dataUrl;
-      mclaren.style.maskImage = dataUrl;
-      mclaren.style.webkitMaskSize = `${W}px ${H}px`;
-      mclaren.style.maskSize = `${W}px ${H}px`;
+      const encoded = 'data:image/svg+xml;base64,' + btoa(svg);
+      mclaren.style.webkitMaskImage = `url("${encoded}")`;
+      mclaren.style.maskImage       = `url("${encoded}")`;
+      mclaren.style.webkitMaskSize  = `${W}px ${H}px`;
+      mclaren.style.maskSize        = `${W}px ${H}px`;
       mclaren.style.webkitMaskRepeat = 'no-repeat';
-      mclaren.style.maskRepeat = 'no-repeat';
+      mclaren.style.maskRepeat       = 'no-repeat';
 
       rafRef.current = requestAnimationFrame(tick);
     };
@@ -268,10 +267,11 @@ function LiquidHero({ onScrollDown }) {
       aliveRef.current = false;
       cancelAnimationFrame(rafRef.current);
       window.removeEventListener('mousemove', onMove);
+      trailRef.current = [];
       if (mclaren) {
-        mclaren.style.opacity = '0';
+        mclaren.style.opacity         = '0';
         mclaren.style.webkitMaskImage = 'none';
-        mclaren.style.maskImage = 'none';
+        mclaren.style.maskImage       = 'none';
       }
     };
   }, []);
