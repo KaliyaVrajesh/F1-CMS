@@ -54,35 +54,47 @@ function AppContent() {
   // Track Three.js / GLB loading progress via drei's useProgress
   const { progress: glbProgress, active } = useProgress();
 
-  // Preload legend images on mount
+  // Preload legend images on mount with per-image and overall timeouts
   useEffect(() => {
     let loadedCount = 0;
     const totalImages = LEGEND_IMAGES.length;
+    let isMounted = true;
 
     if (totalImages === 0) {
       setImagesReady(true);
       return;
     }
 
+    const checkComplete = () => {
+      loadedCount++;
+      if (isMounted) {
+        setImageProgress(Math.floor((loadedCount / totalImages) * 100));
+        if (loadedCount >= totalImages) {
+          setImagesReady(true);
+        }
+      }
+    };
+
     LEGEND_IMAGES.forEach(src => {
       const img = new Image();
-      img.onload = () => {
-        loadedCount++;
-        setImageProgress(Math.floor((loadedCount / totalImages) * 100));
-        if (loadedCount === totalImages) {
-          setImagesReady(true);
-        }
-      };
-      img.onerror = () => {
-        loadedCount++;
-        console.warn(`Failed to preload legend image: ${src}`);
-        setImageProgress(Math.floor((loadedCount / totalImages) * 100));
-        if (loadedCount === totalImages) {
-          setImagesReady(true);
-        }
-      };
+      const timer = setTimeout(checkComplete, 1200);
+      img.onload = () => { clearTimeout(timer); checkComplete(); };
+      img.onerror = () => { clearTimeout(timer); checkComplete(); };
       img.src = src;
     });
+
+    // Hard fallback: images marked ready within 1.5s max
+    const fallbackTimer = setTimeout(() => {
+      if (isMounted) {
+        setImageProgress(100);
+        setImagesReady(true);
+      }
+    }, 1500);
+
+    return () => {
+      isMounted = false;
+      clearTimeout(fallbackTimer);
+    };
   }, []);
 
   const [timeProgress, setTimeProgress] = useState(0);
@@ -90,33 +102,31 @@ function AppContent() {
   // Smooth time-based progress ticker to ensure steady progression
   useEffect(() => {
     const started = Date.now();
-    const DURATION = 2500;
+    const DURATION = 2200;
     const interval = setInterval(() => {
       const elapsed = Date.now() - started;
       const pct = Math.min(100, Math.floor((elapsed / DURATION) * 100));
       setTimeProgress(pct);
       if (pct >= 100) clearInterval(interval);
-    }, 40);
+    }, 30);
     return () => clearInterval(interval);
   }, []);
 
   useEffect(() => {
     // GLBs done when progress hits 100 and loader is no longer active
     if (glbProgress >= 100 && !active) setGlbReady(true);
-    // If Three.js never starts loading (non-home routes), mark ready after 600ms
-    if (glbProgress === 0 && !active) {
-      const t = setTimeout(() => setGlbReady(true), 600);
-      return () => clearTimeout(t);
-    }
+    // Hard fallback: GLBs marked ready within 1.5s max
+    const t = setTimeout(() => setGlbReady(true), 1500);
+    return () => clearTimeout(t);
   }, [glbProgress, active]);
 
-  // Window load event
+  // Window load event with guaranteed completion
   useEffect(() => {
-    const MIN_DURATION = 2800;
+    const MIN_DURATION = 1800;
     const started = Date.now();
 
     const finish = () => {
-      const elapsed   = Date.now() - started;
+      const elapsed = Date.now() - started;
       const remaining = Math.max(0, MIN_DURATION - elapsed);
       setTimeout(() => setWindowReady(true), remaining);
     };
@@ -125,25 +135,36 @@ function AppContent() {
       finish();
     } else {
       window.addEventListener('load', finish, { once: true });
-      const fallback = setTimeout(() => setWindowReady(true), 8000);
-      return () => {
-        window.removeEventListener('load', finish);
-        clearTimeout(fallback);
-      };
     }
+
+    const fallback = setTimeout(() => setWindowReady(true), 2500);
+    return () => {
+      window.removeEventListener('load', finish);
+      clearTimeout(fallback);
+    };
   }, []);
 
-  // Hide loading screen only when ALL are ready
+  // Hide loading screen when resources are ready or timeProgress reaches 100
   useEffect(() => {
-    if (windowReady && glbReady && imagesReady) {
+    if ((windowReady && glbReady && imagesReady) || timeProgress >= 100) {
       setIsLoading(false);
     }
-  }, [windowReady, glbReady, imagesReady]);
+  }, [windowReady, glbReady, imagesReady, timeProgress]);
 
-  // Calculate combined progress percentage for loading screen (never stuck at 50%)
+  // Absolute failsafe: loading screen will NEVER stay longer than 2.8s
+  useEffect(() => {
+    const failsafe = setTimeout(() => {
+      setIsLoading(false);
+    }, 2800);
+    return () => clearTimeout(failsafe);
+  }, []);
+
+  // Calculate combined progress percentage for loading screen
   const effectiveGlb = glbReady ? 100 : glbProgress;
-  const resourceProgress = (effectiveGlb * 0.5) + (imageProgress * 0.3) + (windowReady ? 20 : 0);
-  const loadPercent = Math.min(100, Math.round(Math.max(resourceProgress, timeProgress * 0.95)));
+  const resourceProgress = (effectiveGlb * 0.4) + (imageProgress * 0.3) + (windowReady ? 30 : 0);
+  const loadPercent = !isLoading
+    ? 100
+    : Math.min(100, Math.round(Math.max(resourceProgress, timeProgress)));
 
   // Route changes after first load — no full loading screen
   useEffect(() => {
