@@ -86,6 +86,12 @@ export const getF1Schedule = (year) =>
 export const getF1AllSeasons = () => api.get('/f1/seasons');
 export const getF1NextRace   = () => api.get('/f1/next-race');
 
+// Circuits
+export const getF1Circuits             = (year) =>
+  api.get('/f1/circuits', { params: year ? { year } : {} });
+export const getF1SeasonCircuits       = (year) =>
+  api.get(`/f1/circuits/season${year ? `/${year}` : ''}`);
+
 // Standings (live, official)
 export const getF1DriverStandings      = (year) =>
   api.get(`/f1/standings/drivers${year ? `/${year}` : ''}`);

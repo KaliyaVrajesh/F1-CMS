@@ -14,6 +14,20 @@ const getSchedule = asyncHandler(async (req, res) => {
   res.json(data);
 });
 
+// ── Circuits ──────────────────────────────────────────────────────────────────
+
+const getCircuits = asyncHandler(async (req, res) => {
+  const year = parseInt(req.params.year || req.query.year, 10) || null;
+  const data = await f1.getCircuits(year);
+  res.json(data);
+});
+
+const getCurrentSeasonCircuits = asyncHandler(async (req, res) => {
+  const year = parseInt(req.params.year || req.query.year, 10) || undefined;
+  const data = await f1.getCurrentSeasonCircuits(year);
+  res.json(data);
+});
+
 // ── Standings ─────────────────────────────────────────────────────────────────
 
 const getDriverStandings = asyncHandler(async (req, res) => {
@@ -178,6 +192,8 @@ const clearCache = asyncHandler(async (req, res) => {
 
 module.exports = {
   getSchedule,
+  getCircuits,
+  getCurrentSeasonCircuits,
   getDriverStandings,
   getConstructorStandings,
   getRaceResults,

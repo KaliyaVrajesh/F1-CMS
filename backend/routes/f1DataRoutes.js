@@ -4,8 +4,19 @@ const { protect, admin } = require('../middleware/authMiddleware');
 const ctrl = require('../controllers/f1DataController');
 
 // ── Schedule ──────────────────────────────────────────────────────────────────
-// GET /api/f1/schedule?year=2025
+// GET /api/f1/schedule?year=2026
 router.get('/schedule', ctrl.getSchedule);
+
+// ── Circuits ──────────────────────────────────────────────────────────────────
+// GET /api/f1/circuits              — all historical circuits
+// GET /api/f1/circuits?year=2026    — circuits for a specific season
+// GET /api/f1/circuits/:year        — circuits for a season (path param)
+// GET /api/f1/circuits/season       — current season with round/date info
+// GET /api/f1/circuits/season/:year — specific season with round/date info
+router.get('/circuits/season',       ctrl.getCurrentSeasonCircuits);
+router.get('/circuits/season/:year', ctrl.getCurrentSeasonCircuits);
+router.get('/circuits/:year',        ctrl.getCircuits);
+router.get('/circuits',              ctrl.getCircuits);
 
 // ── Season list ───────────────────────────────────────────────────────────────
 // GET /api/f1/seasons

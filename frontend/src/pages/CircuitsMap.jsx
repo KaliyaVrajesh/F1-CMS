@@ -1,11 +1,11 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { getRaces } from '../services/api';
+import { getF1SeasonCircuits, getF1AllSeasons, getF1RaceResults } from '../services/api';
 import toast from 'react-hot-toast';
 import CircuitSVG from '../components/CircuitSVG';
 import F1Globe from '../components/F1Globe';
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// ─── Flag map ─────────────────────────────────────────────────────────────────
 const FLAG = {
   monaco: '🇲🇨', 'united kingdom': '🇬🇧', uk: '🇬🇧', britain: '🇬🇧',
   italy: '🇮🇹', belgium: '🇧🇪', japan: '🇯🇵', brazil: '🇧🇷',
@@ -16,14 +16,46 @@ const FLAG = {
   france: '🇫🇷', germany: '🇩🇪', hungary: '🇭🇺',
   netherlands: '🇳🇱', mexico: '🇲🇽', azerbaijan: '🇦🇿',
   'saudi arabia': '🇸🇦', qatar: '🇶🇦', china: '🇨🇳',
-  russia: '🇷🇺',
+  russia: '🇷🇺', portugal: '🇵🇹', turkey: '🇹🇷',
+  'las vegas': '🇺🇸',
 };
 const getFlag = (c) => FLAG[(c || '').toLowerCase()] || '🏁';
 
-// ─── Floating detail card (hover / click) ─────────────────────────────────────
+// ─── Race status badge ────────────────────────────────────────────────────────
+const RaceStatus = ({ date }) => {
+  const raceDate = new Date(date);
+  const now = new Date();
+  const diff = raceDate - now;
+  const daysDiff = Math.ceil(diff / (1000 * 60 * 60 * 24));
+
+  if (diff < 0) {
+    return (
+      <span className="px-2 py-0.5 rounded-full text-xs font-bold"
+        style={{ background: 'rgba(0,200,100,0.12)', color: '#00c864', border: '1px solid rgba(0,200,100,0.2)' }}>
+        Completed
+      </span>
+    );
+  }
+  if (daysDiff <= 7) {
+    return (
+      <span className="px-2 py-0.5 rounded-full text-xs font-bold animate-pulse"
+        style={{ background: 'rgba(225,6,0,0.15)', color: '#E10600', border: '1px solid rgba(225,6,0,0.3)' }}>
+        This Week!
+      </span>
+    );
+  }
+  return (
+    <span className="px-2 py-0.5 rounded-full text-xs font-bold"
+      style={{ background: 'rgba(255,255,255,0.06)', color: '#888', border: '1px solid rgba(255,255,255,0.1)' }}>
+      In {daysDiff} days
+    </span>
+  );
+};
+
+// ─── Detail card ──────────────────────────────────────────────────────────────
 const DetailCard = ({ race, isPinned, onPin, onClose }) => (
   <motion.div
-    key={race._id}
+    key={race._id || race.circuitId}
     initial={{ opacity: 0, scale: 0.92, y: 10 }}
     animate={{ opacity: 1, scale: 1, y: 0 }}
     exit={{ opacity: 0, scale: 0.92, y: 10 }}
@@ -44,35 +76,31 @@ const DetailCard = ({ race, isPinned, onPin, onClose }) => (
       style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 mb-0.5">
-          <span className="text-base">{getFlag(race.circuitCountry)}</span>
+          <span className="text-base">{getFlag(race.country)}</span>
           <span className="text-f1red text-xs font-bold uppercase tracking-widest truncate">
-            {race.circuitCountry || 'Grand Prix'}
+            {race.country || 'Grand Prix'}
           </span>
+          {race.date && <RaceStatus date={race.date} />}
         </div>
         <h3 className="font-f1heading font-black text-white text-base uppercase leading-tight truncate">
           {race.name}
         </h3>
-        <p className="text-gray-500 text-xs mt-0.5 truncate">{race.circuit}</p>
+        <p className="text-gray-500 text-xs mt-0.5 truncate">{race.circuitName}</p>
       </div>
       <div className="flex items-center gap-1.5 ml-2 flex-shrink-0">
-        {/* Pin / unpin */}
-        <button
-          onClick={onPin}
+        <button onClick={onPin}
           className="w-6 h-6 flex items-center justify-center rounded-full transition-colors"
           style={{
             background: isPinned ? 'rgba(225,6,0,0.2)' : 'rgba(255,255,255,0.06)',
             color: isPinned ? '#E10600' : '#666',
           }}
-          title={isPinned ? 'Unpin' : 'Pin'}
-        >
+          title={isPinned ? 'Unpin' : 'Pin'}>
           📌
         </button>
         {isPinned && (
-          <button
-            onClick={onClose}
+          <button onClick={onClose}
             className="w-6 h-6 flex items-center justify-center rounded-full text-gray-600 hover:text-white transition-colors"
-            style={{ background: 'rgba(255,255,255,0.06)', fontSize: '10px' }}
-          >
+            style={{ background: 'rgba(255,255,255,0.06)', fontSize: '10px' }}>
             ✕
           </button>
         )}
@@ -83,19 +111,21 @@ const DetailCard = ({ race, isPinned, onPin, onClose }) => (
     <div className="flex items-center justify-center px-5 py-4"
       style={{ height: '160px', background: 'rgba(0,0,0,0.3)' }}>
       <CircuitSVG
-        circuitName={[race.circuit, race.name].filter(Boolean).join(' ')}
+        circuitName={[race.circuitName, race.name, race.locality].filter(Boolean).join(' ')}
         animate={true}
         className="w-full h-full"
       />
     </div>
 
-    {/* Stats */}
+    {/* Stats grid */}
     <div className="px-4 py-3 grid grid-cols-2 gap-2">
       {[
-        { label: 'Date',   value: race.date ? new Date(race.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '—' },
-        { label: 'Season', value: race.season?.year || '—' },
-        { label: 'City',   value: race.circuitCity || '—' },
-        { label: 'Round',  value: race.round ? `Round ${race.round}` : '—' },
+        { label: 'Date',     value: race.date
+            ? new Date(race.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+            : '—' },
+        { label: 'Round',    value: race.round ? `Round ${race.round}` : '—' },
+        { label: 'Locality', value: race.locality || '—' },
+        { label: 'Season',   value: race.season || '—' },
       ].map(({ label, value }) => (
         <div key={label} className="rounded-lg px-3 py-2"
           style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.05)' }}>
@@ -105,29 +135,31 @@ const DetailCard = ({ race, isPinned, onPin, onClose }) => (
       ))}
     </div>
 
-    {/* Top 3 */}
-    {race.results?.length > 0 && (
+    {/* Podium — loaded lazily when card is pinned */}
+    {isPinned && race.podium && race.podium.length > 0 && (
       <div className="px-4 pb-4">
         <p className="text-gray-600 text-xs uppercase tracking-wider mb-2">Podium</p>
         <div className="space-y-1">
-          {race.results.slice(0, 3).map((r, i) => (
+          {race.podium.map((r, i) => (
             <div key={i} className="flex items-center gap-2 rounded-lg px-3 py-1.5"
               style={{ background: 'rgba(255,255,255,0.03)' }}>
               <span className="text-xs font-black w-4 text-center"
                 style={{ color: i === 0 ? '#FFD700' : i === 1 ? '#C0C0C0' : '#CD7F32' }}>
                 {i + 1}
               </span>
-              <span className="text-white text-xs font-semibold flex-1 truncate">
-                {r.driver?.name || r.driverName || '—'}
-              </span>
-              <span className="text-gray-600 text-xs truncate">
-                {r.constructor?.name || r.constructorName || ''}
-              </span>
+              <span className="text-white text-xs font-semibold flex-1 truncate">{r.driver}</span>
+              <span className="text-gray-600 text-xs truncate">{r.constructor}</span>
             </div>
           ))}
         </div>
       </div>
     )}
+
+    {/* Source badge */}
+    <div className="px-4 pb-3 flex items-center gap-1.5">
+      <span className="w-1 h-1 rounded-full bg-green-400" />
+      <span className="text-gray-700 text-xs">Live · Jolpica F1 API</span>
+    </div>
   </motion.div>
 );
 
@@ -137,8 +169,27 @@ const STARS = Array.from({ length: 150 }, () => ({
   top:     `${Math.random() * 100}%`,
   left:    `${Math.random() * 100}%`,
   opacity: Math.random() * 0.5 + 0.1,
-  delay:   Math.random() * 3,
 }));
+
+// ─── Normalise Jolpica race → shape the globe/card expects ───────────────────
+const normaliseRace = (r) => ({
+  _id:         `${r.season}-${r.round}`,    // stable synthetic id
+  circuitId:   r.circuitId,
+  name:        r.name,
+  circuitName: r.circuitName,
+  circuit:     r.circuitName,               // CircuitSVG uses this
+  locality:    r.locality,
+  country:     r.country,
+  circuitCountry: r.country,
+  circuitCity:    r.locality,
+  latitude:    r.lat,
+  longitude:   r.lng,
+  date:        r.date,
+  round:       r.round,
+  season:      r.season,
+  results:     [],
+  podium:      null,
+});
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 const CircuitsMap = () => {
@@ -147,76 +198,102 @@ const CircuitsMap = () => {
   const [season, setSeason]         = useState('');
   const [seasons, setSeasons]       = useState([]);
   const [visibleCount, setVisible]  = useState(0);
-  const [pinnedRace, setPinned]     = useState(null);   // clicked = pinned
-  const [hoveredRace, setHovered]   = useState(null);   // hover preview
+  const [pinnedRace, setPinned]     = useState(null);
+  const [hoveredRace, setHovered]   = useState(null);
   const revealTimer                 = useRef(null);
 
+  // ── Load season list from Jolpica ─────────────────────────────────────────
   useEffect(() => {
-    fetchRaces();
+    const currentYear = new Date().getFullYear();
+    // Show a useful range: current year + 5 back, then let API fill the rest
+    const fallback = Array.from({ length: 6 }, (_, i) => currentYear - i);
+    setSeasons(fallback);
+    setSeason(String(currentYear));
   }, []);
 
-  const fetchRaces = async () => {
+  // ── Load races for selected season from Jolpica ───────────────────────────
+  const fetchRaces = useCallback(async (yr) => {
+    if (!yr) return;
+    setLoading(true);
+    setRaces([]);
+    setPinned(null);
+    setHovered(null);
     try {
-      const { data } = await getRaces();
-      setRaces(data);
-      const yrs = [...new Set(data.map(r => r.season?.year).filter(Boolean))].sort((a, b) => b - a);
-      setSeasons(yrs);
-      if (yrs.length > 0) {
-        setSeason(String(yrs[0]));
-      }
+      const { data } = await getF1SeasonCircuits(parseInt(yr, 10));
+      const normalised = data
+        .filter(r => r.lat != null && r.lng != null)
+        .map(normaliseRace);
+      setRaces(normalised);
     } catch {
-      toast.error('Failed to fetch races');
+      toast.error(`No circuit data for ${yr}`);
+      setRaces([]);
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  // Filtered races for selected season (only those with coords)
-  const filteredRaces = races.filter(r =>
-    r.latitude != null && r.longitude != null &&
-    (!season || String(r.season?.year) === season)
-  );
-
-  // Staggered reveal when season changes
   useEffect(() => {
-    if (!season) return;
+    if (season) fetchRaces(season);
+  }, [season, fetchRaces]);
+
+  // ── Staggered globe dot reveal ────────────────────────────────────────────
+  useEffect(() => {
     setVisible(0);
-    setPinned(null);
-    setHovered(null);
-
     if (revealTimer.current) clearInterval(revealTimer.current);
-
-    const total = filteredRaces.length;
+    const total = races.length;
     if (total === 0) return;
-
-    // Reveal all dots within 900ms
     const interval = Math.min(900 / total, 80);
     let count = 0;
-
     revealTimer.current = setInterval(() => {
       count++;
       setVisible(count);
       if (count >= total) clearInterval(revealTimer.current);
     }, interval);
-
     return () => clearInterval(revealTimer.current);
-  }, [season, races]);
+  }, [races]);
 
-  // The card to show: pinned takes priority over hovered
+  // ── Lazy-load podium when a race is pinned ────────────────────────────────
+  useEffect(() => {
+    if (!pinnedRace || pinnedRace.podium !== null) return;
+    const past = new Date(pinnedRace.date) < new Date();
+    if (!past) {
+      setPinned(p => p ? { ...p, podium: [] } : null);
+      return;
+    }
+    getF1RaceResults(pinnedRace.season, pinnedRace.round)
+      .then(({ data }) => {
+        const podium = (data.results || []).slice(0, 3).map(r => ({
+          driver:      `${r.driver.firstName} ${r.driver.lastName}`,
+          constructor: r.constructor.name,
+        }));
+        setPinned(p => p ? { ...p, podium } : null);
+        // Also cache into races array
+        setRaces(prev => prev.map(r =>
+          r._id === pinnedRace._id ? { ...r, podium } : r
+        ));
+      })
+      .catch(() => {
+        setPinned(p => p ? { ...p, podium: [] } : null);
+      });
+  }, [pinnedRace?._id]);
+
   const activeRace = pinnedRace || hoveredRace;
 
   const handleSelect = (race) => {
-    setPinned(prev => prev?._id === race._id ? null : race);
+    setPinned(prev => {
+      if (prev?._id === race._id) return null;
+      // Set podium null so the lazy-load effect fires
+      return { ...race, podium: null };
+    });
   };
 
   const handleHoverChange = (race) => {
     if (!pinnedRace) setHovered(race);
   };
 
-  if (loading) {
+  if (loading && races.length === 0) {
     return (
-      <div className="fixed inset-0 flex items-center justify-center"
-        style={{ background: '#020408' }}>
+      <div className="fixed inset-0 flex items-center justify-center" style={{ background: '#020408', top: '64px' }}>
         <div className="relative">
           <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-f1red" />
           <div className="absolute inset-0 flex items-center justify-center">
@@ -228,13 +305,9 @@ const CircuitsMap = () => {
   }
 
   return (
-    <div
-      className="fixed inset-0 overflow-hidden"
-      style={{
-        top: '64px', // below navbar
-        background: 'radial-gradient(ellipse at 40% 50%, #0a1628 0%, #020408 65%)',
-      }}
-    >
+    <div className="fixed inset-0 overflow-hidden"
+      style={{ top: '64px', background: 'radial-gradient(ellipse at 40% 50%, #0a1628 0%, #020408 65%)' }}>
+
       {/* Starfield */}
       <div className="absolute inset-0 pointer-events-none">
         {STARS.map((s, i) => (
@@ -243,10 +316,10 @@ const CircuitsMap = () => {
         ))}
       </div>
 
-      {/* Globe — fills the whole area */}
+      {/* Globe */}
       <div className="absolute inset-0">
         <F1Globe
-          races={filteredRaces}
+          races={races}
           visibleCount={visibleCount}
           selectedId={pinnedRace?._id}
           onSelect={handleSelect}
@@ -254,26 +327,30 @@ const CircuitsMap = () => {
         />
       </div>
 
+      {/* ── Top-left: Title + source badge ── */}
+      <div className="absolute top-4 left-6 z-20 pointer-events-none">
+        <p className="text-f1red text-xs font-bold uppercase tracking-[0.3em] mb-0.5">Formula 1</p>
+        <h1 className="font-f1heading font-black text-white text-2xl uppercase leading-none">
+          World <span className="text-f1red">Circuits</span>
+        </h1>
+        <div className="flex items-center gap-1.5 mt-1.5">
+          <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+          <span className="text-gray-600 text-xs">Live data · Jolpica F1</span>
+        </div>
+      </div>
+
       {/* ── Top-right: Season selector + counter ── */}
       <div className="absolute top-4 right-6 z-20 flex items-center gap-3">
-        {/* Dot counter */}
         <AnimatePresence mode="wait">
-          {season && (
-            <motion.div
-              key={season}
-              initial={{ opacity: 0, x: 10 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0 }}
-              className="text-right"
-            >
-              <p className="text-gray-500 text-xs uppercase tracking-widest">
-                {visibleCount} / {filteredRaces.length} circuits
+          {season && !loading && (
+            <motion.div key={season} initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0 }}>
+              <p className="text-gray-500 text-xs uppercase tracking-widest text-right">
+                {visibleCount} / {races.length} circuits
               </p>
             </motion.div>
           )}
         </AnimatePresence>
 
-        {/* Season dropdown */}
         <div className="relative">
           <select
             value={season}
@@ -284,26 +361,13 @@ const CircuitsMap = () => {
               border: '1px solid rgba(225,6,0,0.4)',
               backdropFilter: 'blur(12px)',
               boxShadow: '0 4px 20px rgba(0,0,0,0.4)',
-            }}
-          >
-            <option value="" disabled>Select Season</option>
+            }}>
             {seasons.map(y => (
-              <option key={y} value={y} style={{ background: '#0a0a0f' }}>
-                {y} Season
-              </option>
+              <option key={y} value={y} style={{ background: '#0a0a0f' }}>{y} Season</option>
             ))}
           </select>
-          {/* Dropdown arrow */}
           <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-f1red text-xs pointer-events-none">▼</span>
         </div>
-      </div>
-
-      {/* ── Top-left: Title ── */}
-      <div className="absolute top-4 left-6 z-20 pointer-events-none">
-        <p className="text-f1red text-xs font-bold uppercase tracking-[0.3em] mb-0.5">Formula 1</p>
-        <h1 className="font-f1heading font-black text-white text-2xl uppercase leading-none">
-          World <span className="text-f1red">Circuits</span>
-        </h1>
       </div>
 
       {/* ── Bottom hint ── */}

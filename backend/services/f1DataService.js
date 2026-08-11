@@ -308,7 +308,53 @@ async function getPitStops(year = currentYear(), round) {
 }
 
 /**
- * Season list (all years F1 has run) — paginates to get all results.
+ * All circuits that have hosted an F1 race (optionally filtered by season).
+ * Returns deduplicated by circuitId with full location data.
+ */
+async function getCircuits(year = null) {
+  const key = `circuits:${year || 'all'}`;
+  return cachedFetch(longCache, key, async () => {
+    const url = year
+      ? `/${year}/circuits.json?limit=30`
+      : '/circuits.json?limit=100';
+    const { data } = await ergast.get(url);
+    const circuits = data?.MRData?.CircuitTable?.Circuits || [];
+    return circuits.map(c => ({
+      circuitId:   c.circuitId,
+      name:        c.circuitName,
+      locality:    c.Location.locality,
+      country:     c.Location.country,
+      lat:         parseFloat(c.Location.lat),
+      lng:         parseFloat(c.Location.long),
+      url:         c.url,
+    }));
+  });
+}
+
+/**
+ * Current season schedule enriched with circuit + last race result.
+ * This is what the CircuitsMap page needs: one entry per race, with coords.
+ */
+async function getCurrentSeasonCircuits(year = currentYear()) {
+  const key = `seasonCircuits:${year}`;
+  return cachedFetch(longCache, key, async () => {
+    const { data } = await ergast.get(`/${year}.json?limit=30`);
+    const races = data?.MRData?.RaceTable?.Races || [];
+    return races.map(r => ({
+      round:       parseInt(r.round, 10),
+      name:        r.raceName,
+      circuitId:   r.Circuit.circuitId,
+      circuitName: r.Circuit.circuitName,
+      locality:    r.Circuit.Location.locality,
+      country:     r.Circuit.Location.country,
+      lat:         parseFloat(r.Circuit.Location.lat),
+      lng:         parseFloat(r.Circuit.Location.long),
+      date:        r.date,
+      time:        r.time || null,
+      season:      parseInt(r.season, 10),
+    }));
+  });
+}
  */
 async function getAllSeasons() {
   return cachedFetch(longCache, 'allSeasons', async () => {
@@ -527,8 +573,10 @@ function clearCache(tier = 'all') {
 }
 
 module.exports = {
-  // Ergast
+  // Ergast / Jolpica
   getSchedule,
+  getCircuits,
+  getCurrentSeasonCircuits,
   getDriverStandings,
   getConstructorStandings,
   getRaceResults,
