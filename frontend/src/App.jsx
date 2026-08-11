@@ -85,12 +85,27 @@ function AppContent() {
     });
   }, []);
 
+  const [timeProgress, setTimeProgress] = useState(0);
+
+  // Smooth time-based progress ticker to ensure steady progression
+  useEffect(() => {
+    const started = Date.now();
+    const DURATION = 2500;
+    const interval = setInterval(() => {
+      const elapsed = Date.now() - started;
+      const pct = Math.min(100, Math.floor((elapsed / DURATION) * 100));
+      setTimeProgress(pct);
+      if (pct >= 100) clearInterval(interval);
+    }, 40);
+    return () => clearInterval(interval);
+  }, []);
+
   useEffect(() => {
     // GLBs done when progress hits 100 and loader is no longer active
     if (glbProgress >= 100 && !active) setGlbReady(true);
-    // If Three.js never starts loading (non-home routes), mark ready after 1s
+    // If Three.js never starts loading (non-home routes), mark ready after 600ms
     if (glbProgress === 0 && !active) {
-      const t = setTimeout(() => setGlbReady(true), 1000);
+      const t = setTimeout(() => setGlbReady(true), 600);
       return () => clearTimeout(t);
     }
   }, [glbProgress, active]);
@@ -125,10 +140,10 @@ function AppContent() {
     }
   }, [windowReady, glbReady, imagesReady]);
 
-  // Calculate combined progress percentage for loading screen
-  const loadPercent = Math.round(
-    (glbProgress * 0.5) + (imageProgress * 0.3) + (windowReady ? 20 : 0)
-  );
+  // Calculate combined progress percentage for loading screen (never stuck at 50%)
+  const effectiveGlb = glbReady ? 100 : glbProgress;
+  const resourceProgress = (effectiveGlb * 0.5) + (imageProgress * 0.3) + (windowReady ? 20 : 0);
+  const loadPercent = Math.min(100, Math.round(Math.max(resourceProgress, timeProgress * 0.95)));
 
   // Route changes after first load — no full loading screen
   useEffect(() => {
