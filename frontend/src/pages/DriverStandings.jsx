@@ -5,37 +5,28 @@ import toast from 'react-hot-toast';
 import AnimatedLeaderboard from '../components/AnimatedLeaderboard';
 import TrophyReveal from '../components/TrophyReveal';
 
-// Team colour map for known constructors
-const TEAM_COLOURS = {
-  'red_bull':       '#3671C6',
-  'ferrari':        '#E8002D',
-  'mercedes':       '#27F4D2',
-  'mclaren':        '#FF8000',
-  'aston_martin':   '#229971',
-  'alpine':         '#0093CC',
-  'williams':       '#64C4FF',
-  'rb':             '#6692FF',
-  'kick_sauber':    '#52E252',
-  'haas':           '#B6BABD',
-};
-
-const getTeamColour = (constructorId) =>
-  TEAM_COLOURS[constructorId?.toLowerCase()] || '#E10600';
+import { getTeamColor } from '../utils/teamColors';
 
 // Map Ergast driver data → shape AnimatedLeaderboard expects
-const mapDriver = (d) => ({
-  _id:         d.driverId,
-  name:        `${d.firstName} ${d.lastName}`,
-  nationality: d.nationality,
-  number:      d.number,
-  imageUrl:    null,
-  team:        { name: typeof d.constructor === 'string' ? d.constructor : (d.constructorName || ''), _id: d.constructorId },
-  teamColour:  getTeamColour(d.constructorId),
-  points:      d.points,
-  wins:        d.wins,
-  podiums:     null,       // not in standings response
-  code:        d.code,
-});
+const mapDriver = (d) => {
+  const constructorName = typeof d.constructor === 'string' ? d.constructor : (d.constructorName || '');
+  const driverName = `${d.firstName || ''} ${d.lastName || ''}`.trim() || d.name || '';
+  const teamColour = getTeamColor(d.constructorId || constructorName, driverName || d.driverId);
+
+  return {
+    _id:         d.driverId || driverName,
+    name:        driverName,
+    nationality: d.nationality,
+    number:      d.number,
+    imageUrl:    null,
+    team:        { name: constructorName, _id: d.constructorId },
+    teamColour:  teamColour,
+    points:      d.points,
+    wins:        d.wins,
+    podiums:     null,       // not in standings response
+    code:        d.code,
+  };
+};
 
 const DriverStandings = () => {
   const [drivers, setDrivers]       = useState([]);

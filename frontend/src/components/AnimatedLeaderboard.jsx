@@ -1,23 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import gsap from 'gsap';
-
-const TEAM_COLORS = {
-  'Red Bull Racing':  '#3671C6',
-  'Mercedes':         '#27F4D2',
-  'Ferrari':          '#E8002D',
-  'McLaren':          '#FF8000',
-  'Aston Martin':     '#229971',
-  'Alpine':           '#FF87BC',
-  'Williams':         '#64C4FF',
-  'AlphaTauri':       '#5E8FAA',
-  'RB':               '#6692FF',
-  'Alfa Romeo':       '#C92D4B',
-  'Kick Sauber':      '#52E252',
-  'Haas':             '#B6BABD',
-};
-
-const getTeamColor = (teamName) => TEAM_COLORS[teamName] || '#E10600';
+import { getTeamColor } from '../utils/teamColors';
 
 const AnimatedLeaderboard = ({ drivers, previousDrivers = [] }) => {
   const pointsRef = useRef([]);
@@ -53,7 +37,7 @@ const AnimatedLeaderboard = ({ drivers, previousDrivers = [] }) => {
       <AnimatePresence>
         {drivers.map((driver, index) => {
           const positionChange = getPositionChange(index, driver._id);
-          const teamColor = getTeamColor(driver.team?.name);
+          const teamColor = driver.teamColour || getTeamColor(driver.team, driver);
           const isLeader = index === 0;
           const barWidth = (driver.points / maxPoints) * 100;
 

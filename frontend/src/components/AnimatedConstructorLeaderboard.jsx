@@ -1,24 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import gsap from 'gsap';
-
-// Team accent colors for the top constructors
-const TEAM_COLORS = {
-  'Red Bull Racing':  '#3671C6',
-  'Mercedes':         '#27F4D2',
-  'Ferrari':          '#E8002D',
-  'McLaren':          '#FF8000',
-  'Aston Martin':     '#229971',
-  'Alpine':           '#FF87BC',
-  'Williams':         '#64C4FF',
-  'AlphaTauri':       '#5E8FAA',
-  'RB':               '#6692FF',
-  'Alfa Romeo':       '#C92D4B',
-  'Kick Sauber':      '#52E252',
-  'Haas':             '#B6BABD',
-};
-
-const getTeamColor = (name) => TEAM_COLORS[name] || '#E10600';
+import { getTeamColor } from '../utils/teamColors';
 
 const AnimatedConstructorLeaderboard = ({ constructors }) => {
   const pointsRef = useRef([]);
@@ -45,7 +28,7 @@ const AnimatedConstructorLeaderboard = ({ constructors }) => {
     <div className="space-y-3">
       <AnimatePresence mode="popLayout">
         {constructors.map((constructor, index) => {
-          const color = getTeamColor(constructor.name);
+          const color = constructor.colour || getTeamColor(constructor.name || constructor._id);
           const barWidth = (constructor.points / maxPoints) * 100;
           const isLeader = index === 0;
 
