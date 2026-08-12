@@ -82,9 +82,12 @@ const DriverStandings = () => {
       const mapped = data.map(mapDriver);
       setDrivers(mapped);
       setDataSource('live');
-      // Show trophy if leader is mathematically champion (gap > remaining points)
-      if (mapped.length > 1 && mapped[0].points - mapped[1].points > 25) {
-        setTimeout(() => setShowTrophy(true), 800);
+      
+      // Show 3D Trophy ONLY for completed past seasons (not the current ongoing year)
+      const currentYear = new Date().getFullYear();
+      const isPastSeason = Number(selectedSeason) < currentYear;
+      if (isPastSeason && mapped.length > 0) {
+        setTimeout(() => setShowTrophy(true), 600);
       }
     } catch (err) {
       toast.error('Failed to fetch live standings');
@@ -96,10 +99,20 @@ const DriverStandings = () => {
 
   useEffect(() => { fetchStandings(); }, [fetchStandings]);
 
+  const currentYear = new Date().getFullYear();
+  const isPastSeason = Number(selectedSeason) < currentYear;
+
   return (
     <div className="max-w-7xl mx-auto">
       {showTrophy && drivers[0] && (
-        <TrophyReveal championName={drivers[0].name} points={drivers[0].points} />
+        <TrophyReveal
+          championName={drivers[0].name}
+          points={drivers[0].points}
+          wins={drivers[0].wins}
+          team={drivers[0].team}
+          season={selectedSeason}
+          onClose={() => setShowTrophy(false)}
+        />
       )}
 
       {/* Header */}
@@ -118,8 +131,18 @@ const DriverStandings = () => {
             </h1>
           </div>
 
-          {/* Live badge */}
+          {/* Action & Live badges */}
           <div className="flex items-center gap-3">
+            {isPastSeason && drivers.length > 0 && (
+              <button
+                onClick={() => setShowTrophy(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold bg-amber-500/15 hover:bg-amber-500/25 text-amber-400 border border-amber-500/40 transition-all shadow-sm"
+              >
+                <span>🏆</span>
+                <span>View 3D Trophy</span>
+              </button>
+            )}
+
             <span className="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold"
               style={{ background: 'rgba(0,200,100,0.12)', color: '#00c864', border: '1px solid rgba(0,200,100,0.3)' }}>
               <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />

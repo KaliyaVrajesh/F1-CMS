@@ -3,7 +3,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { getF1ConstructorStandings, getF1AllSeasons } from '../services/api';
 import toast from 'react-hot-toast';
 import AnimatedConstructorLeaderboard from '../components/AnimatedConstructorLeaderboard';
-import TrophyReveal from '../components/TrophyReveal';
 
 const TEAM_COLOURS = {
   'red_bull':       '#3671C6',
@@ -38,7 +37,6 @@ const ConstructorStandings = () => {
   const [seasons, setSeasons]           = useState([]);
   const [selectedSeason, setSelectedSeason] = useState(new Date().getFullYear());
   const [loading, setLoading]           = useState(true);
-  const [showTrophy, setShowTrophy]     = useState(false);
 
   // Load season list from Ergast
   useEffect(() => {
@@ -58,15 +56,11 @@ const ConstructorStandings = () => {
   const fetchStandings = useCallback(async () => {
     if (!selectedSeason) return;
     setLoading(true);
-    setShowTrophy(false);
     setConstructors([]);
     try {
       const { data } = await getF1ConstructorStandings(selectedSeason);
       const mapped = data.map(mapConstructor);
       setConstructors(mapped);
-      if (mapped.length > 1 && mapped[0].points - mapped[1].points > 100) {
-        setTimeout(() => setShowTrophy(true), 800);
-      }
     } catch {
       toast.error('Failed to fetch live constructor standings');
     } finally {
@@ -78,10 +72,6 @@ const ConstructorStandings = () => {
 
   return (
     <div className="max-w-7xl mx-auto">
-      {showTrophy && constructors[0] && (
-        <TrophyReveal championName={constructors[0].name} points={constructors[0].points} />
-      )}
-
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}

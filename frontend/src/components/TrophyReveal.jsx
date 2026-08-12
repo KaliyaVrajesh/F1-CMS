@@ -1,230 +1,84 @@
 import { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import gsap from 'gsap';
+import { playPaddleShift } from '../utils/audio';
 
-// ─── Pure SVG FIA WDC Trophy ──────────────────────────────────────────────────
-// Matches the real trophy: tall trumpet vase, silver body, gold rings, blue gem,
-// lotus petal base, wide flared rim.
-const F1Trophy = ({ glowRef }) => (
-  <svg
-    ref={glowRef}
-    viewBox="0 0 220 380"
-    width="200"
-    height="346"
-    xmlns="http://www.w3.org/2000/svg"
-    style={{ filter: 'drop-shadow(0 0 28px rgba(200,180,80,0.7))' }}
-  >
-    <defs>
-      {/* Silver body gradient */}
-      <linearGradient id="silver" x1="0%" y1="0%" x2="100%" y2="0%">
-        <stop offset="0%"   stopColor="#2a2a2a" />
-        <stop offset="18%"  stopColor="#888" />
-        <stop offset="38%"  stopColor="#e8e8e8" />
-        <stop offset="52%"  stopColor="#ffffff" />
-        <stop offset="65%"  stopColor="#d0d0d0" />
-        <stop offset="82%"  stopColor="#777" />
-        <stop offset="100%" stopColor="#1a1a1a" />
-      </linearGradient>
-      {/* Gold rings */}
-      <linearGradient id="gold" x1="0%" y1="0%" x2="100%" y2="0%">
-        <stop offset="0%"   stopColor="#3a2e00" />
-        <stop offset="25%"  stopColor="#b8860b" />
-        <stop offset="50%"  stopColor="#ffd700" />
-        <stop offset="70%"  stopColor="#daa520" />
-        <stop offset="100%" stopColor="#3a2e00" />
-      </linearGradient>
-      {/* Dark gold for detail */}
-      <linearGradient id="goldDark" x1="0%" y1="0%" x2="100%" y2="0%">
-        <stop offset="0%"   stopColor="#1a1400" />
-        <stop offset="40%"  stopColor="#8b6914" />
-        <stop offset="60%"  stopColor="#c8960c" />
-        <stop offset="100%" stopColor="#1a1400" />
-      </linearGradient>
-      {/* Base gradient */}
-      <linearGradient id="base" x1="0%" y1="0%" x2="100%" y2="0%">
-        <stop offset="0%"   stopColor="#111" />
-        <stop offset="30%"  stopColor="#666" />
-        <stop offset="50%"  stopColor="#bbb" />
-        <stop offset="70%"  stopColor="#666" />
-        <stop offset="100%" stopColor="#111" />
-      </linearGradient>
-      {/* Rim gradient */}
-      <linearGradient id="rim" x1="0%" y1="0%" x2="100%" y2="0%">
-        <stop offset="0%"   stopColor="#111" />
-        <stop offset="20%"  stopColor="#777" />
-        <stop offset="45%"  stopColor="#f0f0f0" />
-        <stop offset="55%"  stopColor="#ffffff" />
-        <stop offset="80%"  stopColor="#777" />
-        <stop offset="100%" stopColor="#111" />
-      </linearGradient>
-      {/* Shine overlay */}
-      <linearGradient id="shine" x1="15%" y1="0%" x2="45%" y2="100%">
-        <stop offset="0%"   stopColor="rgba(255,255,255,0.45)" />
-        <stop offset="40%"  stopColor="rgba(255,255,255,0.15)" />
-        <stop offset="100%" stopColor="rgba(255,255,255,0)" />
-      </linearGradient>
-      {/* Blue gem */}
-      <radialGradient id="gem" cx="35%" cy="30%">
-        <stop offset="0%"   stopColor="#88ccff" />
-        <stop offset="40%"  stopColor="#1a6abf" />
-        <stop offset="100%" stopColor="#0a2a5e" />
-      </radialGradient>
-    </defs>
-
-    {/* ── Circular base disc ── */}
-    <ellipse cx="110" cy="355" rx="72" ry="14" fill="url(#base)" />
-    <ellipse cx="110" cy="350" rx="68" ry="11" fill="url(#silver)" />
-    <ellipse cx="110" cy="346" rx="60" ry="8"  fill="url(#goldDark)" />
-
-    {/* ── Lotus petal collar (above base) ── */}
-    {Array.from({ length: 16 }, (_, i) => {
-      const angle = (i / 16) * Math.PI * 2;
-      const cx = 110 + Math.cos(angle) * 38;
-      const cy = 330 + Math.sin(angle) * 9;
-      return (
-        <ellipse key={i} cx={cx} cy={cy} rx="9" ry="14"
-          fill="url(#goldDark)"
-          transform={`rotate(${(i / 16) * 360}, ${cx}, ${cy})`}
-          opacity="0.9"
-        />
-      );
-    })}
-    {/* Collar ring */}
-    <ellipse cx="110" cy="325" rx="44" ry="10" fill="url(#gold)" />
-    <ellipse cx="110" cy="322" rx="38" ry="7"  fill="url(#goldDark)" />
-
-    {/* ── Lower blue gem ── */}
-    <circle cx="110" cy="318" r="6" fill="url(#gem)" />
-    <circle cx="108" cy="316" r="2" fill="rgba(255,255,255,0.6)" />
-
-    {/* ── Main body — tall trumpet/vase shape ── */}
-    {/* The body narrows from ~38px wide at bottom to ~80px at top */}
-    <path
-      d="M72 318 
-         C70 300 66 280 64 260 
-         C62 240 60 220 60 200 
-         C60 180 62 160 66 140 
-         C70 120 76 105 84 95 
-         C90 88 100 84 110 84
-         C120 84 130 88 136 95
-         C144 105 150 120 154 140
-         C158 160 160 180 160 200
-         C160 220 158 240 156 260
-         C154 280 150 300 148 318
-         Z"
-      fill="url(#silver)"
-    />
-    {/* Shine on body */}
-    <path
-      d="M72 318 
-         C70 300 66 280 64 260 
-         C62 240 60 220 60 200 
-         C60 180 62 160 66 140 
-         C70 120 76 105 84 95 
-         C90 88 100 84 110 84
-         C120 84 130 88 136 95
-         C144 105 150 120 154 140
-         C158 160 160 180 160 200
-         C160 220 158 240 156 260
-         C154 280 150 300 148 318
-         Z"
-      fill="url(#shine)"
-    />
-
-    {/* ── Gold horizontal rings wrapping the body ── */}
-    {/* 10 rings spaced from y=130 to y=310 */}
-    {Array.from({ length: 11 }, (_, i) => {
-      const t = i / 10;
-      // Body width at this y position (narrows toward bottom)
-      const y = 130 + t * 180;
-      // Interpolate body half-width: ~50 at top (y=130), ~38 at bottom (y=310)
-      const hw = 50 - t * 12;
-      return (
-        <g key={i}>
-          <ellipse cx="110" cy={y} rx={hw} ry="4.5" fill="url(#gold)" />
-          <ellipse cx="110" cy={y - 1} rx={hw - 2} ry="2" fill="rgba(255,240,100,0.35)" />
-        </g>
-      );
-    })}
-
-    {/* ── Upper blue gem on body ── */}
-    <circle cx="110" cy="175" r="8" fill="url(#gem)" />
-    <circle cx="107" cy="172" r="3" fill="rgba(255,255,255,0.55)" />
-    {/* Gold bezel around gem */}
-    <circle cx="110" cy="175" r="10" fill="none" stroke="url(#gold)" strokeWidth="2.5" />
-
-    {/* ── Wide flared rim at top ── */}
-    {/* Outer rim — wide ellipse */}
-    <ellipse cx="110" cy="88" rx="82" ry="18" fill="url(#rim)" />
-    {/* Inner rim shadow */}
-    <ellipse cx="110" cy="88" rx="72" ry="13" fill="#1a1a1a" />
-    {/* Rim gold trim */}
-    <ellipse cx="110" cy="84" rx="80" ry="16" fill="none" stroke="url(#gold)" strokeWidth="3" />
-    {/* Rim inner gold trim */}
-    <ellipse cx="110" cy="88" rx="68" ry="12" fill="none" stroke="url(#goldDark)" strokeWidth="1.5" />
-
-    {/* ── Rim top edge highlight ── */}
-    <ellipse cx="110" cy="82" rx="78" ry="14" fill="none"
-      stroke="rgba(255,255,255,0.4)" strokeWidth="1" />
-
-    {/* ── Engraved lines on body (subtle) ── */}
-    {Array.from({ length: 6 }, (_, i) => {
-      const y = 145 + i * 26;
-      const t = (y - 130) / 180;
-      const hw = 48 - t * 11;
-      return (
-        <ellipse key={i} cx="110" cy={y + 13} rx={hw - 1} ry="1.5"
-          fill="none" stroke="rgba(180,180,180,0.25)" strokeWidth="0.8" />
-      );
-    })}
-  </svg>
-);
-
-// ─── Main component ───────────────────────────────────────────────────────────
-const TrophyReveal = ({ championName, points }) => {
-  const trophyRef  = useRef(null);
+const TrophyReveal = ({ championName, points, wins, team, season, onClose }) => {
+  const cardRef     = useRef(null);
   const confettiRef = useRef(null);
   const counterRef  = useRef(null);
   const [visible, setVisible] = useState(true);
 
+  const handleClose = () => {
+    playPaddleShift(0.9);
+    setVisible(false);
+    if (onClose) onClose();
+  };
+
+  useEffect(() => {
+    // ESC key listener to dismiss modal
+    const onKeyDown = (e) => {
+      if (e.key === 'Escape') handleClose();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
+
   useEffect(() => {
     const tl = gsap.timeline();
 
-    // Trophy drops in with bounce
-    tl.from(trophyRef.current, {
-      y: -80, scale: 0.4, opacity: 0,
-      duration: 1.0, ease: 'back.out(1.8)',
-    })
-    // Pulse glow
-    .to(trophyRef.current, {
-      filter: 'drop-shadow(0 0 40px rgba(255,215,0,1))',
-      duration: 0.4, yoyo: true, repeat: 3, ease: 'power1.inOut',
-    })
-    // Confetti burst
-    .from(confettiRef.current?.children || [], {
-      opacity: 0, y: -80, scale: 0,
-      rotation: () => gsap.utils.random(-360, 360),
-      duration: 1.2, stagger: 0.02, ease: 'power2.out',
-    }, '-=0.8');
+    // Modal Card pop-in with bounce
+    if (cardRef.current) {
+      tl.from(cardRef.current, {
+        y: 40,
+        scale: 0.85,
+        opacity: 0,
+        duration: 0.8,
+        ease: 'back.out(1.6)',
+      });
+    }
 
-    // Points counter
-    if (counterRef.current) {
-      gsap.from(counterRef.current, {
-        textContent: 0, duration: 2, delay: 0.5,
-        ease: 'power1.out', snap: { textContent: 1 },
+    // Confetti burst
+    if (confettiRef.current) {
+      tl.from(
+        confettiRef.current.children || [],
+        {
+          opacity: 0,
+          y: -100,
+          scale: 0,
+          rotation: () => gsap.utils.random(-360, 360),
+          duration: 1.4,
+          stagger: 0.015,
+          ease: 'power2.out',
+        },
+        '-=0.5'
+      );
+    }
+
+    // Points odometer counter
+    if (counterRef.current && points) {
+      const targetPoints = parseFloat(points) || 0;
+      const countObj = { val: 0 };
+      gsap.to(countObj, {
+        val: targetPoints,
+        duration: 1.8,
+        delay: 0.3,
+        ease: 'power2.out',
         onUpdate() {
-          if (counterRef.current)
-            counterRef.current.textContent = Math.ceil(this.targets()[0].textContent);
+          if (counterRef.current) {
+            counterRef.current.textContent = countObj.val.toFixed(targetPoints % 1 !== 0 ? 1 : 0);
+          }
         },
       });
     }
 
-    const t = setTimeout(() => setVisible(false), 4000);
-    return () => { tl.kill(); clearTimeout(t); };
+    return () => {
+      tl.kill();
+    };
   }, [points]);
 
-  // Confetti colours — F1 themed
-  const confettiColors = ['#E10600','#FFD700','#ffffff','#ff6b00','#3671C6'];
+  // F1 Championship Gold & Red Confetti colors
+  const confettiColors = ['#FFD700', '#FFA500', '#E10600', '#FFFFFF', '#FFE066', '#3671C6'];
 
   return (
     <AnimatePresence>
@@ -232,73 +86,147 @@ const TrophyReveal = ({ championName, points }) => {
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          exit={{ opacity: 0, scale: 0.96 }}
-          transition={{ exit: { duration: 0.35 } }}
-          className="fixed inset-0 z-50 flex items-center justify-center cursor-pointer"
-          style={{ background: 'rgba(5,5,5,0.92)', backdropFilter: 'blur(6px)' }}
-          onClick={() => setVisible(false)}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.3 }}
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6"
+          style={{ background: 'rgba(3, 4, 8, 0.92)', backdropFilter: 'blur(12px)' }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) handleClose();
+          }}
         >
-          {/* Confetti */}
-          <div ref={confettiRef} className="absolute inset-0 overflow-hidden pointer-events-none">
-            {[...Array(60)].map((_, i) => (
-              <div key={i} className="absolute rounded-sm"
+          {/* Celebratory Confetti Particles */}
+          <div ref={confettiRef} className="absolute inset-0 overflow-hidden pointer-events-none z-10">
+            {[...Array(55)].map((_, i) => (
+              <div
+                key={i}
+                className="absolute rounded-sm"
                 style={{
-                  width:  `${Math.random() * 10 + 4}px`,
-                  height: `${Math.random() * 6  + 3}px`,
-                  left:   `${Math.random() * 100}%`,
-                  top:    `${Math.random() * 100}%`,
-                  background: confettiColors[i % confettiColors.length],
-                  opacity: 0,
+                  width: `${Math.random() * 8 + 4}px`,
+                  height: `${Math.random() * 6 + 3}px`,
+                  left: `${Math.random() * 100}%`,
+                  top: `${Math.random() * 100}%`,
+                  backgroundColor: confettiColors[i % confettiColors.length],
+                  opacity: 0.85,
                   transform: `rotate(${Math.random() * 360}deg)`,
                 }}
               />
             ))}
           </div>
 
-          {/* Content */}
-          <div className="relative z-10 flex flex-col items-center text-center px-6">
-            {/* Trophy SVG */}
-            <div ref={trophyRef}>
-              <F1Trophy />
+          {/* Modal Container */}
+          <div
+            ref={cardRef}
+            className="relative z-20 w-full max-w-xl rounded-3xl overflow-hidden glass border border-amber-500/30 p-6 sm:p-8 flex flex-col items-center text-center shadow-2xl"
+            style={{
+              background: 'linear-gradient(180deg, rgba(16, 18, 28, 0.95) 0%, rgba(8, 9, 15, 0.98) 100%)',
+              boxShadow: '0 0 60px rgba(255, 215, 0, 0.15), 0 25px 50px -12px rgba(0, 0, 0, 0.8)',
+            }}
+          >
+            {/* Close Button */}
+            <button
+              onClick={handleClose}
+              className="absolute top-4 right-4 z-30 w-9 h-9 rounded-full bg-white/5 hover:bg-white/15 border border-white/10 flex items-center justify-center text-gray-400 hover:text-white transition-all duration-200"
+              title="Close"
+            >
+              ✕
+            </button>
+
+            {/* Ambient Gold Spotlight Glow */}
+            <div
+              className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-72 h-72 rounded-full blur-3xl pointer-events-none"
+              style={{ background: 'radial-gradient(circle, rgba(255, 215, 0, 0.25) 0%, rgba(225, 6, 0, 0.05) 70%, transparent 100%)' }}
+            />
+
+            {/* FIA World Championship Header Badge */}
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-amber-400 text-sm">🏆</span>
+              <span className="text-[11px] font-mono font-black tracking-[0.3em] uppercase text-amber-400/90">
+                FIA FORMULA 1 WORLD CHAMPIONSHIP
+              </span>
             </div>
 
-            <motion.h2
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.8 }}
-              className="text-5xl font-f1heading font-black text-white mt-4 mb-2 uppercase tracking-wider"
-            >
-              Champion
-            </motion.h2>
+            <h3 className="text-xs font-mono font-bold tracking-[0.25em] uppercase text-gray-400 mb-4">
+              {season ? `${season} WORLD DRIVERS' CHAMPION` : "WORLD DRIVERS' CHAMPION"}
+            </h3>
 
-            <motion.p
-              initial={{ opacity: 0, y: 10 }}
+            {/* ── 3D Interactive Sketchfab Trophy Embed ── */}
+            <div className="relative w-full h-[280px] sm:h-[320px] rounded-2xl overflow-hidden mb-4 border border-amber-500/20 bg-black/40 shadow-inner group">
+              <iframe
+                title="F1 Trophy - FIA World Drivers Championship"
+                className="w-full h-full"
+                frameBorder="0"
+                allowFullScreen
+                mozallowfullscreen="true"
+                webkitallowfullscreen="true"
+                allow="autoplay; fullscreen; xr-spatial-tracking"
+                src="https://sketchfab.com/models/8fe54d7db58c4985a393d0e7567deaaa/embed?autostart=1&transparent=1&ui_theme=dark&dnt=1"
+              />
+
+              {/* Interactive Rotate Hint Badge */}
+              <div className="absolute bottom-2 right-2 px-2.5 py-1 rounded-md bg-black/75 border border-white/10 text-[10px] font-mono text-gray-300 pointer-events-none backdrop-blur-sm opacity-80 group-hover:opacity-100 transition-opacity">
+                🖱️ Drag to rotate 3D
+              </div>
+            </div>
+
+            {/* Champion Driver Name */}
+            <motion.h2
+              initial={{ opacity: 0, y: 15 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 1.0 }}
-              className="text-3xl font-bold mb-4"
-              style={{ color: '#FFD700' }}
+              transition={{ delay: 0.4 }}
+              className="text-3xl sm:text-4xl font-f1heading font-black tracking-wide uppercase mb-1"
+              style={{
+                background: 'linear-gradient(180deg, #FFFFFF 20%, #FFD700 80%, #FFA500 100%)',
+                WebkitBackgroundClip: 'text',
+                WebkitTextFillColor: 'transparent',
+              }}
             >
               {championName}
-            </motion.p>
+            </motion.h2>
 
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 1.2 }}
-              className="text-5xl font-f1heading font-black text-white"
-            >
-              <span ref={counterRef}>{points}</span>
-              <span className="text-xl text-gray-400 ml-2">PTS</span>
-            </motion.div>
+            {/* Team Pill */}
+            {team && (
+              <motion.p
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.5 }}
+                className="text-xs font-mono font-bold tracking-widest text-gray-400 uppercase mb-4"
+              >
+                {team}
+              </motion.p>
+            )}
 
-            <motion.p
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 2 }}
-              className="text-gray-600 text-xs mt-5 uppercase tracking-widest"
-            >
-              click anywhere to dismiss
-            </motion.p>
+            {/* Stats Row */}
+            <div className="flex items-center justify-center gap-6 pt-3 border-t border-white/10 w-full">
+              {/* Points */}
+              <div className="text-center">
+                <div className="text-2xl sm:text-3xl font-f1heading font-black text-white tabular-nums">
+                  <span ref={counterRef}>0</span>
+                </div>
+                <div className="text-[10px] font-mono font-bold tracking-widest text-gray-500 uppercase">
+                  TOTAL POINTS
+                </div>
+              </div>
+
+              {/* Wins */}
+              {wins !== undefined && wins !== null && (
+                <>
+                  <div className="h-8 w-px bg-white/10" />
+                  <div className="text-center">
+                    <div className="text-2xl sm:text-3xl font-f1heading font-black text-amber-400 tabular-nums">
+                      {wins}
+                    </div>
+                    <div className="text-[10px] font-mono font-bold tracking-widest text-gray-500 uppercase">
+                      GRAND PRIX WINS
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* Dismiss Hint */}
+            <p className="text-gray-500 text-[10px] font-mono tracking-widest uppercase mt-5">
+              Click outside or press ESC to close
+            </p>
           </div>
         </motion.div>
       )}
