@@ -1,13 +1,42 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const TrophyReveal = ({ championName, points, wins, team, season, onClose }) => {
   const [visible, setVisible] = useState(true);
+  const [isInteracting, setIsInteracting] = useState(false);
+  const [countdown, setCountdown] = useState(3);
+  const timerRef = useRef(null);
 
   const handleClose = () => {
     setVisible(false);
     if (onClose) onClose();
   };
+
+  const handleStartInteraction = () => {
+    setIsInteracting(true);
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+  };
+
+  useEffect(() => {
+    // Auto-dismiss in ~3.5 seconds unless user clicks/interacts with the 3D model
+    if (!isInteracting) {
+      timerRef.current = setTimeout(() => {
+        handleClose();
+      }, 3500);
+
+      const interval = setInterval(() => {
+        setCountdown((prev) => (prev > 1 ? prev - 1 : 0));
+      }, 1000);
+
+      return () => {
+        if (timerRef.current) clearTimeout(timerRef.current);
+        clearInterval(interval);
+      };
+    }
+  }, [isInteracting]);
 
   useEffect(() => {
     // ESC key to close
@@ -18,6 +47,14 @@ const TrophyReveal = ({ championName, points, wins, team, season, onClose }) => 
     return () => window.removeEventListener('keydown', onKeyDown);
   }, []);
 
+  // Format team name safely (filters out native JS Object prototype constructor leaks)
+  let safeTeam = '';
+  if (typeof team === 'string' && !team.includes('function Object') && !team.includes('[object')) {
+    safeTeam = team;
+  } else if (team && typeof team === 'object' && typeof team.name === 'string' && !team.name.includes('function Object')) {
+    safeTeam = team.name;
+  }
+
   return (
     <AnimatePresence>
       {visible && (
@@ -25,7 +62,7 @@ const TrophyReveal = ({ championName, points, wins, team, season, onClose }) => 
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          transition={{ duration: 0.3 }}
+          transition={{ duration: 0.35 }}
           className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 overflow-y-auto"
           style={{ background: 'rgba(0, 0, 0, 0.75)', backdropFilter: 'blur(8px)' }}
           onClick={(e) => {
@@ -36,17 +73,22 @@ const TrophyReveal = ({ championName, points, wins, team, season, onClose }) => 
           <motion.div
             initial={{ opacity: 0, scale: 0.88, y: 20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.92, y: 15 }}
+            exit={{ opacity: 0, scale: 0.90, y: 15 }}
             transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
             className="relative z-20 w-full max-w-lg rounded-3xl overflow-hidden glass border border-amber-500/40 p-6 sm:p-8 flex flex-col items-center text-center shadow-2xl"
             style={{
               background: 'linear-gradient(180deg, rgba(20, 22, 32, 0.98) 0%, rgba(10, 12, 18, 0.98) 100%)',
               boxShadow: '0 0 50px rgba(255, 215, 0, 0.2), 0 20px 40px rgba(0, 0, 0, 0.8)',
             }}
+            onMouseEnter={handleStartInteraction}
+            onClick={handleStartInteraction}
           >
             {/* Close Button */}
             <button
-              onClick={handleClose}
+              onClick={(e) => {
+                e.stopPropagation();
+                handleClose();
+              }}
               className="absolute top-4 right-4 z-30 w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 border border-white/10 flex items-center justify-center text-gray-300 hover:text-white transition-all duration-200 cursor-pointer text-sm"
               title="Close"
             >
@@ -65,9 +107,12 @@ const TrophyReveal = ({ championName, points, wins, team, season, onClose }) => 
               {season ? `${season} World Drivers' Champion` : "World Drivers' Champion"}
             </p>
 
-            {/* ── Sketchfab 3D Embed Wrapper ── */}
-            <div className="sketchfab-embed-wrapper w-full mb-4">
-              <div className="w-full h-[280px] sm:h-[320px] rounded-2xl overflow-hidden border border-amber-500/30 bg-black/80 shadow-inner relative">
+            {/* ── Sketchfab 3D Embed Wrapper with Auto 360 Spin ── */}
+            <div className="sketchfab-embed-wrapper w-full mb-3 relative group">
+              <div
+                className="w-full h-[280px] sm:h-[320px] rounded-2xl overflow-hidden border border-amber-500/30 bg-black/80 shadow-inner relative"
+                onClick={handleStartInteraction}
+              >
                 <iframe
                   title="F1 Trophy - FIA World Drivers Championship"
                   frameBorder="0"
@@ -79,9 +124,22 @@ const TrophyReveal = ({ championName, points, wins, team, season, onClose }) => 
                   execution-while-out-of-viewport="true"
                   execution-while-not-rendered="true"
                   web-share="true"
-                  src="https://sketchfab.com/models/8fe54d7db58c4985a393d0e7567deaaa/embed"
+                  src="https://sketchfab.com/models/8fe54d7db58c4985a393d0e7567deaaa/embed?autostart=1&autospin=0.6&transparent=1&ui_theme=dark&dnt=1"
                   className="w-full h-full"
                 />
+              </div>
+
+              {/* Interaction Status Pill */}
+              <div
+                onClick={handleStartInteraction}
+                className="mt-2 inline-flex items-center gap-2 px-3 py-1 rounded-full text-[10px] font-mono tracking-wider uppercase border transition-all cursor-pointer"
+                style={{
+                  background: isInteracting ? 'rgba(0, 230, 118, 0.15)' : 'rgba(255, 215, 0, 0.12)',
+                  borderColor: isInteracting ? 'rgba(0, 230, 118, 0.4)' : 'rgba(255, 215, 0, 0.3)',
+                  color: isInteracting ? '#00e676' : '#FFD700',
+                }}
+              >
+                <span>{isInteracting ? '✨ 3D Interactive Mode Active' : `🖱️ Click to Interact (Auto-closing in ${countdown}s)`}</span>
               </div>
             </div>
 
@@ -97,10 +155,10 @@ const TrophyReveal = ({ championName, points, wins, team, season, onClose }) => 
               {championName}
             </h2>
 
-            {/* Team */}
-            {team && (
+            {/* Team Name */}
+            {safeTeam && (
               <p className="text-xs font-mono font-bold tracking-widest text-gray-400 uppercase mb-3">
-                {typeof team === 'object' ? team?.name : String(team)}
+                {safeTeam}
               </p>
             )}
 

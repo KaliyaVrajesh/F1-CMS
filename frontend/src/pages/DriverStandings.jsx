@@ -29,7 +29,7 @@ const mapDriver = (d) => ({
   nationality: d.nationality,
   number:      d.number,
   imageUrl:    null,
-  team:        { name: d.constructor, _id: d.constructorId },
+  team:        { name: typeof d.constructor === 'string' ? d.constructor : (d.constructorName || ''), _id: d.constructorId },
   teamColour:  getTeamColour(d.constructorId),
   points:      d.points,
   wins:        d.wins,
