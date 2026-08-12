@@ -1,7 +1,33 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import gsap from 'gsap';
-import { getTeamColor } from '../utils/teamColors';
+import { getTeamColor, getTeamName, getDriverPhotoUrl } from '../utils/teamColors';
+
+const DriverAvatar = ({ driver, teamColor }) => {
+  const [imgError, setImgError] = useState(false);
+  const photoUrl = driver.imageUrl || getDriverPhotoUrl(driver);
+
+  if (!imgError && photoUrl) {
+    return (
+      <img
+        src={photoUrl}
+        alt={driver.name}
+        className="w-12 h-12 rounded-full object-cover shrink-0 bg-dark-800"
+        style={{ border: `2px solid ${teamColor}` }}
+        onError={() => setImgError(true)}
+      />
+    );
+  }
+
+  return (
+    <div
+      className="w-12 h-12 rounded-full flex items-center justify-center text-lg font-black shrink-0 border"
+      style={{ background: `${teamColor}20`, color: teamColor, borderColor: `${teamColor}40` }}
+    >
+      {driver.name ? driver.name.charAt(0) : '🏎️'}
+    </div>
+  );
+};
 
 const AnimatedLeaderboard = ({ drivers, previousDrivers = [] }) => {
   const pointsRef = useRef([]);
@@ -38,6 +64,7 @@ const AnimatedLeaderboard = ({ drivers, previousDrivers = [] }) => {
         {drivers.map((driver, index) => {
           const positionChange = getPositionChange(index, driver._id);
           const teamColor = driver.teamColour || getTeamColor(driver.team, driver);
+          const teamName = driver.team?.name || getTeamName(driver.team, driver);
           const isLeader = index === 0;
           const barWidth = (driver.points / maxPoints) * 100;
 
@@ -86,27 +113,14 @@ const AnimatedLeaderboard = ({ drivers, previousDrivers = [] }) => {
 
                 {/* Avatar + name */}
                 <div className="flex items-center space-x-3 flex-1 min-w-0">
-                  {driver.imageUrl ? (
-                    <img
-                      src={driver.imageUrl}
-                      alt={driver.name}
-                      className="w-12 h-12 rounded-full object-cover shrink-0"
-                      style={{ border: `2px solid ${teamColor}` }}
-                      onError={(e) => { e.target.style.display = 'none'; }}
-                    />
-                  ) : (
-                    <div
-                      className="w-12 h-12 rounded-full flex items-center justify-center text-lg font-black shrink-0"
-                      style={{ background: `${teamColor}22`, color: teamColor }}
-                    >
-                      {driver.name.charAt(0)}
-                    </div>
-                  )}
+                  <DriverAvatar driver={driver} teamColor={teamColor} />
                   <div className="min-w-0">
                     <div className="font-bold text-lg truncate">{driver.name}</div>
-                    <div className="text-sm truncate" style={{ color: teamColor }}>
-                      {driver.team?.name}
-                    </div>
+                    {teamName && (
+                      <div className="text-sm font-semibold truncate" style={{ color: teamColor }}>
+                        {teamName}
+                      </div>
+                    )}
                   </div>
                 </div>
 

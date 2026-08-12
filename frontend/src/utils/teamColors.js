@@ -1,5 +1,5 @@
 /**
- * Formula 1 Team & Driver Color Resolution Engine
+ * Formula 1 Team & Driver Color and Information Engine
  * Handles modern (2026, 2025, 2024, etc.) & historical team liveries,
  * constructor IDs, display names, and driver names.
  */
@@ -93,6 +93,61 @@ export const TEAM_COLORS = {
   lancia: '#800000',
 };
 
+export const TEAM_NAMES = {
+  mercedes: 'Mercedes',
+  ferrari: 'Ferrari',
+  mclaren: 'McLaren',
+  red_bull: 'Red Bull',
+  redbull: 'Red Bull',
+  red_bull_racing: 'Red Bull',
+  aston_martin: 'Aston Martin',
+  aston: 'Aston Martin',
+  alpine: 'Alpine',
+  williams: 'Williams',
+  rb: 'RB',
+  vcarb: 'RB',
+  racing_bulls: 'RB',
+  visa_cash_app_rb: 'RB',
+  alphatauri: 'AlphaTauri',
+  toro_rosso: 'Toro Rosso',
+  kick_sauber: 'Kick Sauber',
+  stake_f1_team: 'Kick Sauber',
+  sauber: 'Sauber',
+  alfa_romeo: 'Alfa Romeo',
+  alfa: 'Alfa Romeo',
+  haas: 'Haas',
+  haas_f1_team: 'Haas',
+  racing_point: 'Racing Point',
+  force_india: 'Force India',
+  renault: 'Renault',
+  lotus: 'Lotus',
+  brawn: 'Brawn GP',
+  benetton: 'Benetton',
+  jordan: 'Jordan',
+  tyrrell: 'Tyrrell',
+  brabham: 'Brabham',
+  marussia: 'Marussia',
+  manor: 'Manor',
+  caterham: 'Caterham',
+  bmw_sauber: 'BMW Sauber',
+  toyota: 'Toyota',
+  jaguar: 'Jaguar',
+  minardi: 'Minardi',
+  prost: 'Prost',
+  arrows: 'Arrows',
+  stewart: 'Stewart',
+  ligier: 'Ligier',
+  march: 'March',
+  shadow: 'Shadow',
+  hesketh: 'Hesketh',
+  matra: 'Matra',
+  cooper: 'Cooper',
+  vanwall: 'Vanwall',
+  brm: 'BRM',
+  maserati: 'Maserati',
+  lancia: 'Lancia',
+};
+
 // Driver name substrings mapped to livery colors
 export const DRIVER_COLORS = {
   // Mercedes
@@ -145,6 +200,49 @@ export const DRIVER_COLORS = {
   devries: '#6692FF',
 };
 
+// Driver name substrings mapped to default Team Names
+export const DRIVER_TEAMS = {
+  antonelli: 'Mercedes',
+  russell: 'Mercedes',
+  hamilton: 'Mercedes',
+  leclerc: 'Ferrari',
+  norris: 'McLaren',
+  piastri: 'McLaren',
+  verstappen: 'Red Bull',
+  lawson: 'Red Bull',
+  perez: 'Red Bull',
+  alonso: 'Aston Martin',
+  stroll: 'Aston Martin',
+  sainz: 'Ferrari',
+  albon: 'Williams',
+  colapinto: 'Williams',
+  gasly: 'Alpine',
+  doohan: 'Alpine',
+  bearman: 'Haas',
+  ocon: 'Haas',
+  magnussen: 'Haas',
+  hulkenberg: 'Kick Sauber',
+  bortoleto: 'Kick Sauber',
+  bottas: 'Kick Sauber',
+  zhou: 'Kick Sauber',
+  tsunoda: 'RB',
+  hadjar: 'RB',
+  ricciardo: 'RB',
+  vettel: 'Aston Martin',
+  raikkonen: 'Alfa Romeo',
+  latifi: 'Williams',
+  mazepin: 'Haas',
+  mick_schumacher: 'Haas',
+  schumacher: 'Ferrari',
+  senna: 'McLaren',
+  mansell: 'Williams',
+  piquet: 'Williams',
+  lauda: 'Ferrari',
+  hunt: 'McLaren',
+  fangio: 'Mercedes',
+  clark: 'Lotus',
+};
+
 /**
  * Intelligent team color resolver.
  * @param {string|object} team - Constructor ID, team name, or object with name/_id
@@ -153,7 +251,6 @@ export const DRIVER_COLORS = {
  * @returns {string} HEX color string
  */
 export function getTeamColor(team, driver = null, fallback = '#E10600') {
-  // 1. Check direct string or object constructor
   let rawTeam = '';
   if (typeof team === 'string') {
     rawTeam = team;
@@ -167,7 +264,7 @@ export function getTeamColor(team, driver = null, fallback = '#E10600') {
     return TEAM_COLORS[teamSlug];
   }
 
-  // 2. Fuzzy substring check for team name
+  // Fuzzy substring check for team name
   if (teamSlug) {
     if (teamSlug.includes('mercedes')) return TEAM_COLORS.mercedes;
     if (teamSlug.includes('ferrari')) return TEAM_COLORS.ferrari;
@@ -188,7 +285,7 @@ export function getTeamColor(team, driver = null, fallback = '#E10600') {
     if (teamSlug.includes('force_india') || teamSlug.includes('racing_point')) return TEAM_COLORS.force_india;
   }
 
-  // 3. Check driver fallback mapping
+  // Check driver fallback mapping
   let rawDriver = '';
   if (typeof driver === 'string') {
     rawDriver = driver;
@@ -206,4 +303,86 @@ export function getTeamColor(team, driver = null, fallback = '#E10600') {
   }
 
   return fallback;
+}
+
+/**
+ * Intelligent team name resolver.
+ * Ensures team name is never empty or missing across any season.
+ */
+export function getTeamName(team, driver = null) {
+  let rawTeam = '';
+  if (typeof team === 'string') {
+    rawTeam = team;
+  } else if (team && typeof team === 'object') {
+    rawTeam = team.name || team._id || team.constructorId || '';
+  }
+
+  if (rawTeam && typeof rawTeam === 'string' && !rawTeam.includes('function Object') && !rawTeam.includes('[object')) {
+    const teamSlug = rawTeam.toLowerCase().trim().replace(/[\s-]+/g, '_');
+    if (TEAM_NAMES[teamSlug]) return TEAM_NAMES[teamSlug];
+    if (teamSlug.includes('mercedes')) return 'Mercedes';
+    if (teamSlug.includes('ferrari')) return 'Ferrari';
+    if (teamSlug.includes('mclaren')) return 'McLaren';
+    if (teamSlug.includes('red_bull') || teamSlug.includes('redbull')) return 'Red Bull';
+    if (teamSlug.includes('aston')) return 'Aston Martin';
+    if (teamSlug.includes('alpine')) return 'Alpine';
+    if (teamSlug.includes('williams')) return 'Williams';
+    if (teamSlug.includes('kick') || teamSlug.includes('sauber') || teamSlug.includes('stake')) return 'Kick Sauber';
+    if (teamSlug.includes('haas')) return 'Haas';
+    if (teamSlug.includes('rb') || teamSlug.includes('vcarb')) return 'RB';
+    if (teamSlug.includes('racing_point')) return 'Racing Point';
+    if (teamSlug.includes('force_india')) return 'Force India';
+    if (teamSlug.includes('renault')) return 'Renault';
+    if (teamSlug.includes('alphatauri')) return 'AlphaTauri';
+    if (teamSlug.includes('toro_rosso')) return 'Toro Rosso';
+    if (teamSlug.includes('alfa_romeo') || teamSlug.includes('alfa')) return 'Alfa Romeo';
+    return rawTeam;
+  }
+
+  // Driver fallback
+  let rawDriver = '';
+  if (typeof driver === 'string') {
+    rawDriver = driver;
+  } else if (driver && typeof driver === 'object') {
+    rawDriver = `${driver.firstName || ''} ${driver.lastName || ''} ${driver.name || ''} ${driver.driverId || ''}`;
+  }
+
+  const driverSlug = rawDriver.toLowerCase().trim();
+  if (driverSlug) {
+    for (const [key, name] of Object.entries(DRIVER_TEAMS)) {
+      if (driverSlug.includes(key)) {
+        return name;
+      }
+    }
+  }
+
+  return '';
+}
+
+/**
+ * Generate photo URL candidate for a driver.
+ */
+export function getDriverPhotoUrl(driver) {
+  if (typeof driver === 'string') {
+    const slug = driver.toLowerCase().trim().replace(/[\s-]+/g, '_');
+    return `/images/drivers/${slug}.png`;
+  }
+  if (driver?.imageUrl) return driver.imageUrl;
+  const name = `${driver?.firstName || ''} ${driver?.lastName || ''}`.trim() || driver?.name || driver?._id || '';
+  const slug = name.toLowerCase().replace(/[\s-]+/g, '_');
+  return `/images/drivers/${slug}.png`;
+}
+
+/**
+ * Generate logo URL candidate for a team.
+ */
+export function getTeamLogoUrl(team) {
+  if (typeof team === 'string') {
+    const slug = team.toLowerCase().trim().replace(/[\s-]+/g, '_');
+    return `/images/teams/${slug}.png`;
+  }
+  if (team?.logoUrl) return team.logoUrl;
+  const name = team?.name || team?._id || team?.constructorId || '';
+  const slug = name.toLowerCase().replace(/[\s-]+/g, '_');
+  return `/images/teams/${slug}.png`;
 }

@@ -1,7 +1,32 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import gsap from 'gsap';
-import { getTeamColor } from '../utils/teamColors';
+import { getTeamColor, getTeamLogoUrl } from '../utils/teamColors';
+
+const TeamLogo = ({ constructor, color }) => {
+  const [imgError, setImgError] = useState(false);
+  const logoUrl = constructor.logoUrl || getTeamLogoUrl(constructor);
+
+  if (!imgError && logoUrl) {
+    return (
+      <img
+        src={logoUrl}
+        alt={constructor.name}
+        className="w-14 h-9 object-contain shrink-0 p-0.5 rounded bg-black/20"
+        onError={() => setImgError(true)}
+      />
+    );
+  }
+
+  return (
+    <div
+      className="w-14 h-9 rounded flex items-center justify-center text-xs font-black shrink-0 border"
+      style={{ background: `${color}20`, color, borderColor: `${color}40` }}
+    >
+      {(constructor.name || 'F1').substring(0, 3).toUpperCase()}
+    </div>
+  );
+};
 
 const AnimatedConstructorLeaderboard = ({ constructors }) => {
   const pointsRef = useRef([]);
@@ -64,21 +89,7 @@ const AnimatedConstructorLeaderboard = ({ constructors }) => {
 
                 {/* Logo + Name */}
                 <div className="flex items-center space-x-3 flex-1 min-w-0">
-                  {constructor.logoUrl ? (
-                    <img
-                      src={constructor.logoUrl}
-                      alt={constructor.name}
-                      className="w-14 h-9 object-contain shrink-0"
-                      onError={(e) => { e.target.style.display = 'none'; }}
-                    />
-                  ) : (
-                    <div
-                      className="w-14 h-9 rounded flex items-center justify-center text-xs font-black shrink-0"
-                      style={{ background: `${color}22`, color }}
-                    >
-                      {constructor.name.substring(0, 3).toUpperCase()}
-                    </div>
-                  )}
+                  <TeamLogo constructor={constructor} color={color} />
                   <div className="min-w-0">
                     <div className="font-bold text-lg truncate">{constructor.name}</div>
                     <div className="text-xs text-gray-400">{constructor.country}</div>
