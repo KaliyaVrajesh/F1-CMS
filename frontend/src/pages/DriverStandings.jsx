@@ -82,13 +82,6 @@ const DriverStandings = () => {
       const mapped = data.map(mapDriver);
       setDrivers(mapped);
       setDataSource('live');
-      
-      // Show 3D Trophy ONLY for completed past seasons (not the current ongoing year)
-      const currentYear = new Date().getFullYear();
-      const isPastSeason = Number(selectedSeason) < currentYear;
-      if (isPastSeason && mapped.length > 0) {
-        setTimeout(() => setShowTrophy(true), 600);
-      }
     } catch (err) {
       toast.error('Failed to fetch live standings');
       setDataSource('error');
@@ -136,9 +129,9 @@ const DriverStandings = () => {
             {isPastSeason && drivers.length > 0 && (
               <button
                 onClick={() => setShowTrophy(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold bg-amber-500/15 hover:bg-amber-500/25 text-amber-400 border border-amber-500/40 transition-all shadow-sm"
+                className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black tracking-wider uppercase bg-gradient-to-r from-amber-500/20 to-yellow-500/10 hover:from-amber-500/30 hover:to-yellow-500/20 text-amber-300 border border-amber-500/50 transition-all duration-200 shadow-lg shadow-amber-500/10 cursor-pointer"
               >
-                <span>🏆</span>
+                <span className="text-sm">🏆</span>
                 <span>View 3D Trophy</span>
               </button>
             )}
@@ -150,6 +143,36 @@ const DriverStandings = () => {
             </span>
           </div>
         </div>
+
+        {/* Completed Season Champion Highlight Banner */}
+        {isPastSeason && drivers.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.98 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="mb-6 p-4 rounded-2xl glass border border-amber-500/30 flex flex-wrap items-center justify-between gap-4 bg-gradient-to-r from-amber-950/30 via-dark-900 to-amber-950/20"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-xl">
+                👑
+              </div>
+              <div>
+                <div className="text-[10px] font-mono font-bold tracking-[0.2em] text-amber-400 uppercase">
+                  {selectedSeason} WORLD CHAMPION
+                </div>
+                <div className="text-lg font-f1heading font-black text-white">
+                  {drivers[0].name} <span className="text-sm text-amber-300 font-sans font-bold">({drivers[0].points} PTS)</span>
+                </div>
+              </div>
+            </div>
+
+            <button
+              onClick={() => setShowTrophy(true)}
+              className="px-3.5 py-1.5 rounded-lg bg-amber-500 text-black text-xs font-black tracking-wider uppercase hover:bg-amber-400 transition-colors flex items-center gap-1.5"
+            >
+              <span>🏆 Inspect 3D Trophy</span>
+            </button>
+          </motion.div>
+        )}
 
         {/* Season selector */}
         <div className="flex flex-wrap items-center gap-4">

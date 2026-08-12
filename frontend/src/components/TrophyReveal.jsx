@@ -88,8 +88,8 @@ const TrophyReveal = ({ championName, points, wins, team, season, onClose }) => 
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.3 }}
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6"
-          style={{ background: 'rgba(3, 4, 8, 0.92)', backdropFilter: 'blur(12px)' }}
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 overflow-y-auto"
+          style={{ background: 'rgba(0, 0, 0, 0.70)', backdropFilter: 'blur(5px)' }}
           onClick={(e) => {
             if (e.target === e.currentTarget) handleClose();
           }}
