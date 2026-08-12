@@ -12,8 +12,11 @@ const DriverAvatar = ({ driver, teamColor }) => {
       <img
         src={photoUrl}
         alt={driver.name}
-        className="w-12 h-12 rounded-full object-cover shrink-0 bg-dark-800"
-        style={{ border: `2px solid ${teamColor}` }}
+        className="w-12 h-12 rounded-full object-cover shrink-0 bg-dark-800 shadow-md"
+        style={{
+          border: `2px solid ${teamColor}`,
+          objectPosition: '50% 15%',
+        }}
         onError={() => setImgError(true)}
       />
     );

@@ -1,7 +1,7 @@
 /**
  * Formula 1 Team & Driver Color and Information Engine
  * Handles modern (2026, 2025, 2024, etc.) & historical team liveries,
- * constructor IDs, display names, and driver names.
+ * constructor IDs, display names, and driver photos/logos.
  */
 
 export const TEAM_COLORS = {
@@ -59,6 +59,9 @@ export const TEAM_COLORS = {
   haas_f1_team: '#B6BABD',
   moneygram_haas: '#B6BABD',
   
+  // Cadillac
+  cadillac: '#D4AF37',
+
   // Historical
   renault: '#FFF500',
   lotus: '#FFB800',
@@ -117,6 +120,7 @@ export const TEAM_NAMES = {
   alfa: 'Alfa Romeo',
   haas: 'Haas',
   haas_f1_team: 'Haas',
+  cadillac: 'Cadillac',
   racing_point: 'Racing Point',
   force_india: 'Force India',
   renault: 'Renault',
@@ -148,56 +152,84 @@ export const TEAM_NAMES = {
   lancia: 'Lancia',
 };
 
-// Driver name substrings mapped to livery colors
-export const DRIVER_COLORS = {
-  // Mercedes
-  antonelli: '#27F4D2',
-  kimi: '#27F4D2',
-  russell: '#27F4D2',
-  
-  // Ferrari
-  hamilton: '#E8002D',
-  leclerc: '#E8002D',
-  
-  // McLaren
-  norris: '#FF8000',
-  piastri: '#FF8000',
-  
-  // Red Bull
-  verstappen: '#3671C6',
-  lawson: '#3671C6',
-  perez: '#3671C6',
-  
-  // Aston Martin
-  alonso: '#229971',
-  stroll: '#229971',
-  
-  // Williams
-  sainz: '#64C4FF',
-  albon: '#64C4FF',
-  colapinto: '#64C4FF',
-  sargeant: '#64C4FF',
-  
-  // Alpine
-  gasly: '#0093CC',
-  doohan: '#0093CC',
-  
-  // Haas
-  bearman: '#B6BABD',
-  ocon: '#B6BABD',
-  magnussen: '#B6BABD',
-  
-  // Kick Sauber / Audi
-  hulkenberg: '#52E252',
-  bortoleto: '#52E252',
-  bottas: '#52E252',
-  zhou: '#52E252',
-  
-  // RB (VCARB)
-  tsunoda: '#6692FF',
-  hadjar: '#6692FF',
-  ricciardo: '#6692FF',
-  devries: '#6692FF',
+// Driver photo asset mapping
+export const DRIVER_PHOTO_FILES = {
+  verstappen: '/images/drivers/max_verstappen.webp',
+  max_verstappen: '/images/drivers/max_verstappen.webp',
+  hamilton: '/images/drivers/lewis_hamilton.jpg',
+  lewis_hamilton: '/images/drivers/lewis_hamilton.jpg',
+  norris: '/images/drivers/lando_norris.jpg',
+  lando_norris: '/images/drivers/lando_norris.jpg',
+  leclerc: '/images/drivers/charles_leclerc.jpg',
+  charles_leclerc: '/images/drivers/charles_leclerc.jpg',
+  russell: '/images/drivers/george_russell.jpg',
+  george_russell: '/images/drivers/george_russell.jpg',
+  piastri: '/images/drivers/oscar_piastri.jpg',
+  oscar_piastri: '/images/drivers/oscar_piastri.jpg',
+  antonelli: '/images/drivers/kimi_antonelli.jpg',
+  kimi_antonelli: '/images/drivers/kimi_antonelli.jpg',
+  andrea_kimi_antonelli: '/images/drivers/kimi_antonelli.jpg',
+  kimi: '/images/drivers/kimi_antonelli.jpg',
+  sainz: '/images/drivers/carlos_sainz.jpg',
+  carlos_sainz: '/images/drivers/carlos_sainz.jpg',
+  alonso: '/images/drivers/fernando_alonso.jpg',
+  fernando_alonso: '/images/drivers/fernando_alonso.jpg',
+  albon: '/images/drivers/alex_albon.jpg',
+  alex_albon: '/images/drivers/alex_albon.jpg',
+  alexander_albon: '/images/drivers/alex_albon.jpg',
+  lawson: '/images/drivers/liam_lawson.jpg',
+  liam_lawson: '/images/drivers/liam_lawson.jpg',
+  gasly: '/images/drivers/pierre_gasly.png',
+  pierre_gasly: '/images/drivers/pierre_gasly.png',
+  bearman: '/images/drivers/oliver_bearman.jpg',
+  oliver_bearman: '/images/drivers/oliver_bearman.jpg',
+  ocon: '/images/drivers/esteban_ocon.jpg',
+  esteban_ocon: '/images/drivers/esteban_ocon.jpg',
+  hulkenberg: '/images/drivers/nico_hulkenberg.jpg',
+  nico_hulkenberg: '/images/drivers/nico_hulkenberg.jpg',
+  bortoleto: '/images/drivers/gabriel_bortoleto.jpg',
+  gabriel_bortoleto: '/images/drivers/gabriel_bortoleto.jpg',
+  tsunoda: '/images/drivers/yuki_tsunoda.jpg',
+  yuki_tsunoda: '/images/drivers/yuki_tsunoda.jpg',
+  hadjar: '/images/drivers/isack_hadjar.jpg',
+  isack_hadjar: '/images/drivers/isack_hadjar.jpg',
+  issac_hadjar: '/images/drivers/isack_hadjar.jpg',
+  colapinto: '/images/drivers/franco_colapinto.jpg',
+  franco_colapinto: '/images/drivers/franco_colapinto.jpg',
+  stroll: '/images/drivers/lance_stroll.jpg',
+  lance_stroll: '/images/drivers/lance_stroll.jpg',
+  bottas: '/images/drivers/valtteri_bottas.jpg',
+  valtteri_bottas: '/images/drivers/valtteri_bottas.jpg',
+  perez: '/images/drivers/sergio_perez.jpg',
+  sergio_perez: '/images/drivers/sergio_perez.jpg',
+  lindblad: '/images/drivers/arvid_lindblad.jpg',
+  arvid_lindblad: '/images/drivers/arvid_lindblad.jpg',
+};
+
+// Team logo asset mapping
+export const TEAM_LOGO_FILES = {
+  mercedes: '/images/teams/mercedes.png',
+  ferrari: '/images/teams/ferrari.png',
+  scuderia_ferrari: '/images/teams/ferrari.png',
+  mclaren: '/images/teams/mclaren.png',
+  red_bull: '/images/teams/red_bull.png',
+  redbull: '/images/teams/red_bull.png',
+  red_bull_racing: '/images/teams/red_bull.png',
+  aston_martin: '/images/teams/aston_martin.png',
+  aston: '/images/teams/aston_martin.png',
+  alpine: '/images/teams/alpine.png',
+  williams: '/images/teams/williams.png',
+  kick_sauber: '/images/teams/kick_sauber.png',
+  stake_f1_team: '/images/teams/kick_sauber.png',
+  sauber: '/images/teams/sauber.png',
+  audi: '/images/teams/audi.png',
+  haas: '/images/teams/haas.png',
+  haas_f1_team: '/images/teams/haas.png',
+  rb: '/images/teams/rb.png',
+  vcarb: '/images/teams/vcarb.png',
+  visa_cash_app_rb: '/images/teams/vcarb.png',
+  racing_bulls: '/images/teams/vcarb.png',
+  cadillac: '/images/teams/cadillac.png',
 };
 
 // Driver name substrings mapped to default Team Names
@@ -276,6 +308,7 @@ export function getTeamColor(team, driver = null, fallback = '#E10600') {
     if (teamSlug.includes('kick') || teamSlug.includes('sauber') || teamSlug.includes('stake') || teamSlug.includes('audi')) return TEAM_COLORS.kick_sauber;
     if (teamSlug.includes('haas')) return TEAM_COLORS.haas;
     if (teamSlug.includes('rb') || teamSlug.includes('vcarb') || teamSlug.includes('racing_bull') || teamSlug.includes('alphatauri') || teamSlug.includes('toro')) return TEAM_COLORS.rb;
+    if (teamSlug.includes('cadillac')) return TEAM_COLORS.cadillac;
     if (teamSlug.includes('alfa')) return TEAM_COLORS.alfa_romeo;
     if (teamSlug.includes('renault')) return TEAM_COLORS.renault;
     if (teamSlug.includes('lotus')) return TEAM_COLORS.lotus;
@@ -330,6 +363,7 @@ export function getTeamName(team, driver = null) {
     if (teamSlug.includes('kick') || teamSlug.includes('sauber') || teamSlug.includes('stake')) return 'Kick Sauber';
     if (teamSlug.includes('haas')) return 'Haas';
     if (teamSlug.includes('rb') || teamSlug.includes('vcarb')) return 'RB';
+    if (teamSlug.includes('cadillac')) return 'Cadillac';
     if (teamSlug.includes('racing_point')) return 'Racing Point';
     if (teamSlug.includes('force_india')) return 'Force India';
     if (teamSlug.includes('renault')) return 'Renault';
@@ -360,29 +394,57 @@ export function getTeamName(team, driver = null) {
 }
 
 /**
- * Generate photo URL candidate for a driver.
+ * Generate photo URL for a driver with fallback to mapped files.
  */
 export function getDriverPhotoUrl(driver) {
-  if (typeof driver === 'string') {
-    const slug = driver.toLowerCase().trim().replace(/[\s-]+/g, '_');
-    return `/images/drivers/${slug}.png`;
-  }
   if (driver?.imageUrl) return driver.imageUrl;
-  const name = `${driver?.firstName || ''} ${driver?.lastName || ''}`.trim() || driver?.name || driver?._id || '';
-  const slug = name.toLowerCase().replace(/[\s-]+/g, '_');
-  return `/images/drivers/${slug}.png`;
+  
+  let rawDriver = '';
+  if (typeof driver === 'string') {
+    rawDriver = driver;
+  } else if (driver && typeof driver === 'object') {
+    rawDriver = `${driver.firstName || ''} ${driver.lastName || ''} ${driver.name || ''} ${driver.driverId || ''}`;
+  }
+
+  const driverSlug = rawDriver.toLowerCase().trim().replace(/[\s-]+/g, '_');
+
+  if (DRIVER_PHOTO_FILES[driverSlug]) {
+    return DRIVER_PHOTO_FILES[driverSlug];
+  }
+
+  for (const [key, path] of Object.entries(DRIVER_PHOTO_FILES)) {
+    if (driverSlug.includes(key)) {
+      return path;
+    }
+  }
+
+  return `/images/drivers/${driverSlug}.jpg`;
 }
 
 /**
- * Generate logo URL candidate for a team.
+ * Generate logo URL for a team with fallback to mapped files.
  */
 export function getTeamLogoUrl(team) {
-  if (typeof team === 'string') {
-    const slug = team.toLowerCase().trim().replace(/[\s-]+/g, '_');
-    return `/images/teams/${slug}.png`;
-  }
   if (team?.logoUrl) return team.logoUrl;
-  const name = team?.name || team?._id || team?.constructorId || '';
-  const slug = name.toLowerCase().replace(/[\s-]+/g, '_');
-  return `/images/teams/${slug}.png`;
+
+  let rawTeam = '';
+  if (typeof team === 'string') {
+    rawTeam = team;
+  } else if (team && typeof team === 'object') {
+    rawTeam = team.name || team._id || team.constructorId || '';
+  }
+
+  const teamSlug = rawTeam.toLowerCase().trim().replace(/[\s-]+/g, '_');
+
+  if (TEAM_LOGO_FILES[teamSlug]) {
+    return TEAM_LOGO_FILES[teamSlug];
+  }
+
+  for (const [key, path] of Object.entries(TEAM_LOGO_FILES)) {
+    if (teamSlug.includes(key)) {
+      return path;
+    }
+  }
+
+  return `/images/teams/${teamSlug}.png`;
 }
