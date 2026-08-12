@@ -105,7 +105,7 @@ const DriverStandings = () => {
           championName={drivers[0].name}
           points={drivers[0].points}
           wins={drivers[0].wins}
-          team={drivers[0].team}
+          team={drivers[0].team?.name || ''}
           season={selectedSeason}
           onClose={() => setShowTrophy(false)}
         />

@@ -100,7 +100,7 @@ const TrophyReveal = ({ championName, points, wins, team, season, onClose }) => 
             {/* Team */}
             {team && (
               <p className="text-xs font-mono font-bold tracking-widest text-gray-400 uppercase mb-3">
-                {team}
+                {typeof team === 'object' ? team?.name : String(team)}
               </p>
             )}
 
