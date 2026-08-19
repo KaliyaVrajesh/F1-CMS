@@ -288,16 +288,59 @@ async function getDriverCareerStats(driverId) {
 }
 
 /**
- * Lap times for a specific race.
+ * Lap times for a specific race (with automatic multi-page pagination for all laps).
  */
 async function getLapTimes(year = currentYear(), round, lap = 'all') {
   const key = `laps:${year}:${round}:${lap}`;
   return cachedFetch(medCache, key, async () => {
-    const url = lap === 'all'
-      ? `/${year}/${round}/laps.json?limit=2000`
-      : `/${year}/${round}/laps/${lap}.json`;
-    const { data } = await ergast.get(url);
-    return data?.MRData?.RaceTable?.Races?.[0]?.Laps || [];
+    if (lap !== 'all') {
+      const { data } = await ergast.get(`/${year}/${round}/laps/${lap}.json`);
+      return data?.MRData?.RaceTable?.Races?.[0]?.Laps || [];
+    }
+
+    // Fetch initial batch (first 100 timings)
+    const { data: firstData } = await ergast.get(`/${year}/${round}/laps.json?limit=100&offset=0`);
+    const total = parseInt(firstData?.MRData?.total || '0', 10);
+    const initialLaps = firstData?.MRData?.RaceTable?.Races?.[0]?.Laps || [];
+
+    const lapsMap = {};
+    const mergeLaps = (lapsList) => {
+      lapsList.forEach((l) => {
+        const lapNum = parseInt(l.number, 10);
+        if (!lapsMap[lapNum]) {
+          lapsMap[lapNum] = { number: l.number, Timings: [] };
+        }
+        if (Array.isArray(l.Timings)) {
+          l.Timings.forEach((t) => {
+            if (!lapsMap[lapNum].Timings.some((existing) => existing.driverId === t.driverId)) {
+              lapsMap[lapNum].Timings.push(t);
+            }
+          });
+        }
+      });
+    };
+
+    mergeLaps(initialLaps);
+
+    // If more timings exist, fetch all pages in parallel
+    if (total > 100) {
+      const offsets = [];
+      for (let offset = 100; offset < total; offset += 100) {
+        offsets.push(offset);
+      }
+
+      const pagePromises = offsets.map((offset) =>
+        ergast
+          .get(`/${year}/${round}/laps.json?limit=100&offset=${offset}`)
+          .then((res) => res.data?.MRData?.RaceTable?.Races?.[0]?.Laps || [])
+          .catch(() => [])
+      );
+
+      const remainingPages = await Promise.all(pagePromises);
+      remainingPages.forEach((pageLaps) => mergeLaps(pageLaps));
+    }
+
+    return Object.values(lapsMap).sort((a, b) => parseInt(a.number, 10) - parseInt(b.number, 10));
   });
 }
 

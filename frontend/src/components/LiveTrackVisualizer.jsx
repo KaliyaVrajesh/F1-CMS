@@ -297,44 +297,68 @@ const LiveTrackVisualizer = ({
           const effectiveGapFraction = gridGapFraction * (1.0 - spreadFactor) + fullRaceGapFraction * spreadFactor;
           let carProg = (leaderProg - effectiveGapFraction + 1.0) % 1.0;
 
-          // Check if driver pitted on this lap (only after lap 1)
-          const pitData = currentLapNum > 1 ? currentLapTimeline?.pitStops?.find(
-            (p) =>
-              String(p.id).toLowerCase() === String(car.id).toLowerCase() ||
-              String(p.code).toLowerCase() === String(car.code).toLowerCase()
-          ) : null;
-          const isScheduledToPit = Boolean(pitData) || (currentLapNum > 1 && Boolean(standing.pitted));
+          // Handle DNF / Retired Cars
+          if (standing.isRetired) {
+            car.isRetired = true;
+            car.retireReason = standing.retireReason || 'Retired';
+            car.retireLap = standing.retireLap;
+            car.inPit = true;
+            car.pitState = 'IN_BOX';
+            car.speed = 0;
+            car.drsOpen = false;
+            car.pitLaneOffset = 22; // Parked in garage bay
+            carProg = 0.00;
+          } else {
+            car.isRetired = false;
+            car.retireReason = null;
+            car.retireLap = null;
 
-          if (isScheduledToPit) {
-            // Pit straight zone (0.94 -> 0.06)
-            if (carProg >= 0.94 || carProg <= 0.06) {
-              car.inPit = true;
+            // Check if driver pitted on this lap (only after lap 1)
+            const pitData = currentLapNum > 1 ? currentLapTimeline?.pitStops?.find(
+              (p) =>
+                String(p.id).toLowerCase() === String(car.id).toLowerCase() ||
+                String(p.code).toLowerCase() === String(car.code).toLowerCase()
+            ) : null;
+            const isScheduledToPit = Boolean(pitData) || (currentLapNum > 1 && Boolean(standing.pitted));
 
-              // Phase 1: Pit Entry (0.94 - 0.995)
-              if (carProg >= 0.94 && carProg < 0.995) {
-                car.pitState = 'ENTERING';
-                car.speed = 80;
-                car.drsOpen = false;
-                const entryFactor = (carProg - 0.94) / 0.055;
-                car.pitLaneOffset = Math.min(15, Math.max(0, entryFactor * 15));
-              }
-              // Phase 2: Stopped in Pit Box (0.995 - 0.006)
-              else if (carProg >= 0.995 || carProg <= 0.006) {
-                car.pitState = 'IN_BOX';
-                car.speed = 0; // Complete stop for tire change!
-                car.drsOpen = false;
-                car.pitLaneOffset = 15;
-                car.pitDuration = pitData?.pitDuration || standing.pitDuration || '2.4s';
-                car.tire = standing.tire || (currentLapNum > 32 ? 'HARD' : 'MEDIUM');
-                car.tireAge = 1;
-              }
-              // Phase 3: Pit Exit (0.006 - 0.06)
-              else {
-                car.pitState = 'EXITING';
-                car.speed = 80;
-                car.drsOpen = false;
-                const exitFactor = (0.06 - carProg) / 0.054;
-                car.pitLaneOffset = Math.max(0, Math.min(15, exitFactor * 15));
+            if (isScheduledToPit) {
+              // Pit straight zone (0.94 -> 0.06)
+              if (carProg >= 0.94 || carProg <= 0.06) {
+                car.inPit = true;
+
+                // Phase 1: Pit Entry (0.94 - 0.995)
+                if (carProg >= 0.94 && carProg < 0.995) {
+                  car.pitState = 'ENTERING';
+                  car.speed = 80;
+                  car.drsOpen = false;
+                  const entryFactor = (carProg - 0.94) / 0.055;
+                  car.pitLaneOffset = Math.min(15, Math.max(0, entryFactor * 15));
+                }
+                // Phase 2: Stopped in Pit Box (0.995 - 0.006)
+                else if (carProg >= 0.995 || carProg <= 0.006) {
+                  car.pitState = 'IN_BOX';
+                  car.speed = 0; // Complete stop for tire change!
+                  car.drsOpen = false;
+                  car.pitLaneOffset = 15;
+                  car.pitDuration = pitData?.pitDuration || standing.pitDuration || '2.4s';
+                  car.tire = standing.tire || (currentLapNum > 32 ? 'HARD' : 'MEDIUM');
+                  car.tireAge = 1;
+                }
+                // Phase 3: Pit Exit (0.006 - 0.06)
+                else {
+                  car.pitState = 'EXITING';
+                  car.speed = 80;
+                  car.drsOpen = false;
+                  const exitFactor = (0.06 - carProg) / 0.054;
+                  car.pitLaneOffset = Math.max(0, Math.min(15, exitFactor * 15));
+                }
+              } else {
+                car.inPit = false;
+                car.pitState = 'NONE';
+                car.pitLaneOffset = 0;
+                const { speed, isDrs } = calculateSpeedAtProgress(carProg, drsZones, rankIdx > 0 && (standing.intervalToCarAheadSec || 2.0) < 1.0);
+                car.speed = speed * (car.paceFactor || 1.0);
+                car.drsOpen = isDrs && flagStatus === 'GREEN' && currentLapNum > 1;
               }
             } else {
               car.inPit = false;
@@ -344,13 +368,6 @@ const LiveTrackVisualizer = ({
               car.speed = speed * (car.paceFactor || 1.0);
               car.drsOpen = isDrs && flagStatus === 'GREEN' && currentLapNum > 1;
             }
-          } else {
-            car.inPit = false;
-            car.pitState = 'NONE';
-            car.pitLaneOffset = 0;
-            const { speed, isDrs } = calculateSpeedAtProgress(carProg, drsZones, rankIdx > 0 && (standing.intervalToCarAheadSec || 2.0) < 1.0);
-            car.speed = speed * (car.paceFactor || 1.0);
-            car.drsOpen = isDrs && flagStatus === 'GREEN' && currentLapNum > 1;
           }
 
           car.progress = carProg;
@@ -361,8 +378,8 @@ const LiveTrackVisualizer = ({
           car.tire = standing.tire || car.tire || 'MEDIUM';
           car.tireAge = standing.tireAge || car.tireAge || 1;
           car.pitCount = standing.pitCount || car.pitCount || 0;
-          car.gapToLeaderSec = fullGapSec * spreadFactor;
-          car.intervalToCarAheadSec = (standing.intervalToCarAheadSec || (rankIdx === 0 ? 0 : 2.5)) * spreadFactor;
+          car.gapToLeaderSec = standing.isRetired ? 999 : fullGapSec * spreadFactor;
+          car.intervalToCarAheadSec = standing.isRetired ? 0 : (standing.intervalToCarAheadSec || (rankIdx === 0 ? 0 : 2.5)) * spreadFactor;
 
           updatedState.push(car);
         });
@@ -845,8 +862,32 @@ const LiveTrackVisualizer = ({
                   />
                 )}
 
-                {/* ── F1 Game Style Floating Pit Stop Badge ── */}
-                {isInPit && (
+                {/* ── F1 Floating Badge (OUT / IN_BOX / PIT) ── */}
+                {car.isRetired ? (
+                  <g transform="translate(0, -17)">
+                    <rect
+                      x="-18"
+                      y="-8"
+                      width="36"
+                      height="16"
+                      rx="8"
+                      fill="#120505"
+                      stroke="#E10600"
+                      strokeWidth="1.5"
+                      filter="drop-shadow(0 2px 6px rgba(0,0,0,0.95))"
+                    />
+                    <text
+                      textAnchor="middle"
+                      dominantBaseline="central"
+                      fill="#FF4D4D"
+                      fontSize="6.5"
+                      fontWeight="900"
+                      fontFamily="'Titillium Web', monospace"
+                    >
+                      OUT
+                    </text>
+                  </g>
+                ) : isInPit ? (
                   <g transform="translate(0, -17)" className={isInBox ? 'animate-bounce' : ''}>
                     <rect
                       x="-20"
@@ -870,14 +911,15 @@ const LiveTrackVisualizer = ({
                       {isInBox ? `🔧 ${car.pitTimer > 0 ? car.pitTimer.toFixed(1) + 's' : (car.pitDuration || '2.4s')}` : 'PIT 80'}
                     </text>
                   </g>
-                )}
+                ) : null}
 
                 {/* Driver Dot Circle Badge */}
                 <circle
                   r={isInBox ? '10.5' : '9.5'}
                   fill={car.color}
-                  stroke={isInBox ? '#FFD700' : '#FFFFFF'}
+                  stroke={car.isRetired ? '#E10600' : isInBox ? '#FFD700' : '#FFFFFF'}
                   strokeWidth={isInBox ? '2.5' : isSelected ? '2' : '1.2'}
+                  opacity={car.isRetired ? 0.4 : 1.0}
                   filter="drop-shadow(0 3px 6px rgba(0,0,0,0.85))"
                 />
 
@@ -886,6 +928,7 @@ const LiveTrackVisualizer = ({
                   textAnchor="middle"
                   dominantBaseline="central"
                   fill={['#FFFFFF', '#B6BABD', '#27F4D2'].includes(car.color) ? '#000000' : '#FFFFFF'}
+                  opacity={car.isRetired ? 0.6 : 1.0}
                   fontSize="6.5"
                   fontWeight="900"
                   fontFamily="'Titillium Web', system-ui, sans-serif"

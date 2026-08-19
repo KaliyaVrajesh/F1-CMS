@@ -83,13 +83,20 @@ export async function loadHistoricalGPReplay(year = 2024, round = 1) {
     const lapsRes = await getF1LapTimes(year, round).catch(() => null);
     const officialLaps = Array.isArray(lapsRes?.data) ? lapsRes.data : [];
 
-    // Construct Driver Grid & Mapping
+    // Construct Driver Grid & Mapping with authentic DNF/Retirement metadata
     let driverList = DEFAULT_DRIVERS;
     if (raceInfo?.results?.length > 0) {
       driverList = raceInfo.results.map((r, idx) => {
         const matchingDefault = DEFAULT_DRIVERS.find(
           (d) => d.code === r.driver.code || d.name.toLowerCase().includes(r.driver.lastName.toLowerCase())
         );
+
+        const completedLaps = r.laps ? parseInt(r.laps, 10) : 0;
+        const statusText = r.status || 'Finished';
+        const isFinished = statusText.toLowerCase() === 'finished' || statusText.toLowerCase().includes('lapped') || statusText.startsWith('+');
+        const isDNF = !isFinished;
+        const retireLap = isDNF ? completedLaps + 1 : null;
+        const retireReason = isDNF ? statusText : null;
 
         return {
           id: r.driver.driverId || `d-${idx}`,
@@ -101,7 +108,11 @@ export async function loadHistoricalGPReplay(year = 2024, round = 1) {
           photo: matchingDefault?.photo || null,
           gridPos: r.grid ? parseInt(r.grid, 10) : idx + 1,
           finishPos: r.position ? parseInt(r.position, 10) : idx + 1,
-          status: r.status,
+          completedLaps,
+          status: statusText,
+          isDNF,
+          retireLap,
+          retireReason,
         };
       });
     }
@@ -126,8 +137,10 @@ export async function loadHistoricalGPReplay(year = 2024, round = 1) {
       const officialLap = officialLaps.find((l) => parseInt(l.number || l.lap, 10) === lap);
       const officialTimings = officialLap?.Timings || [];
 
-      // Determine each driver's rank on this lap
+      // Determine each driver's rank and state on this lap
       let lapPositions = driverList.map((driver) => {
+        const isRetiredOnLap = driver.isDNF && lap >= (driver.retireLap || driver.completedLaps + 1);
+
         // Match driver in official lap timings
         const timing = officialTimings.find((t) => {
           const tDriverId = String(t.driverId || '').toLowerCase();
@@ -137,7 +150,9 @@ export async function loadHistoricalGPReplay(year = 2024, round = 1) {
         });
 
         let rank;
-        if (lap === 1 && (!timing || !timing.position)) {
+        if (isRetiredOnLap) {
+          rank = 999;
+        } else if (lap === 1 && (!timing || !timing.position)) {
           rank = driver.gridPos || 1;
         } else if (timing && timing.position) {
           rank = parseInt(timing.position, 10);
@@ -162,11 +177,11 @@ export async function loadHistoricalGPReplay(year = 2024, round = 1) {
         const hasPit = Boolean(pitDetail);
         const tState = driverTireState[driver.id] || { tire: 'MEDIUM', tireAge: 1, pitCount: 0 };
 
-        if (hasPit) {
+        if (hasPit && !isRetiredOnLap) {
           tState.pitCount += 1;
           tState.tireAge = 1;
           tState.tire = lap > 32 ? 'HARD' : 'MEDIUM';
-        } else {
+        } else if (!isRetiredOnLap) {
           tState.tireAge += 1;
         }
 
@@ -177,20 +192,25 @@ export async function loadHistoricalGPReplay(year = 2024, round = 1) {
           ...driver,
           lap,
           rank,
-          pitted: hasPit,
+          isRetired: isRetiredOnLap,
+          retireLap: driver.retireLap,
+          retireReason: isRetiredOnLap ? driver.retireReason : null,
+          pitted: hasPit && !isRetiredOnLap,
           pitCount: tState.pitCount,
-          pitDuration: hasPit ? pitDuration : null,
-          pitStopNum: hasPit ? pitStopNum : null,
+          pitDuration: hasPit && !isRetiredOnLap ? pitDuration : null,
+          pitStopNum: hasPit && !isRetiredOnLap ? pitStopNum : null,
           tire: tState.tire,
           tireAge: tState.tireAge,
-          posChange: (driver.gridPos || 1) - rank,
+          posChange: isRetiredOnLap ? 0 : (driver.gridPos || 1) - rank,
         };
       });
 
-      // Deduplicate/Sort ranks strictly so rank is 1..20
-      lapPositions.sort((a, b) => a.rank - b.rank);
-      lapPositions.forEach((d, idx) => {
-        d.rank = idx + 1; // Strict rank index 1..20
+      // Split into active and retired drivers
+      const activeDrivers = lapPositions.filter((d) => !d.isRetired).sort((a, b) => a.rank - b.rank);
+      const retiredDrivers = lapPositions.filter((d) => d.isRetired).sort((a, b) => (b.retireLap || 0) - (a.retireLap || 0));
+
+      activeDrivers.forEach((d, idx) => {
+        d.rank = idx + 1; // Strict rank index 1..N for active cars
         d.posChange = (d.gridPos || (idx + 1)) - (idx + 1);
 
         // Compute authentic progressive time gaps around the circuit
@@ -200,13 +220,20 @@ export async function loadHistoricalGPReplay(year = 2024, round = 1) {
         } else {
           const lapSpreadMultiplier = Math.min(1.0, (lap - 1) / 2.5 + 0.2);
           const baseDelta = (0.4 + (idx * 0.35) + (Math.sin(idx * 1.5 + lap * 0.3) * 0.25)) * lapSpreadMultiplier;
-          const prevGap = lapPositions[idx - 1].gapToLeaderSec || 0;
+          const prevGap = activeDrivers[idx - 1].gapToLeaderSec || 0;
           d.intervalToCarAheadSec = Math.max(0.1, baseDelta);
           d.gapToLeaderSec = prevGap + d.intervalToCarAheadSec;
         }
       });
 
-      currentPositions = lapPositions;
+      retiredDrivers.forEach((d, idx) => {
+        d.rank = activeDrivers.length + idx + 1;
+        d.gapToLeaderSec = 999;
+        d.intervalToCarAheadSec = 0;
+      });
+
+      const combinedPositions = [...activeDrivers, ...retiredDrivers];
+      currentPositions = combinedPositions;
 
       // Identify real overtakes on this lap
       const overtakes = [];
