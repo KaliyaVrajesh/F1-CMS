@@ -118,6 +118,20 @@ const Navbar = () => {
           {/* Nav items */}
           <div className="flex items-center space-x-6">
             <NavLink to="/" label="Home" />
+            <Link
+              to="/live-race"
+              className="relative flex items-center gap-1.5"
+              onClick={() => playPaddleShift(1.0)}
+              onMouseEnter={() => playPaddleShift(1.2)}
+            >
+              <span className="w-2 h-2 rounded-full bg-f1red animate-pulse" />
+              <AnimatedText
+                text="Live Race"
+                letterClass="text-gray-300"
+                hoverClass="text-white"
+                totalMs={0.35}
+              />
+            </Link>
             <NavLink to="/championship" label="Championship" />
             <NavLink to="/circuits-map" label="Circuits" />
             <NavLink to="/legends" label="Legends" />

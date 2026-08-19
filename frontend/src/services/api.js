@@ -131,6 +131,10 @@ export const getF1CurrentTyres  = (sessionKey)    =>
   api.get('/f1/live/tyres',     { params: sessionKey ? { session_key: sessionKey } : {} });
 export const getF1LiveDrivers   = (sessionKey)    =>
   api.get('/f1/live/drivers',   { params: sessionKey ? { session_key: sessionKey } : {} });
+export const getF1LiveLocations = (sessionKey)    =>
+  api.get('/f1/live/locations', { params: sessionKey ? { session_key: sessionKey } : {} });
+export const getF1LiveCarData   = (sessionKey)    =>
+  api.get('/f1/live/car_data',  { params: sessionKey ? { session_key: sessionKey } : {} });
 
 // Compound dashboard snapshot
 export const getF1Dashboard = () => api.get('/f1/dashboard');

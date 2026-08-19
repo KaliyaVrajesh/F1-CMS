@@ -20,6 +20,7 @@ import EditRace from './pages/EditRace';
 import EditRaceResults from './pages/EditRaceResults';
 import CircuitsMap from './pages/CircuitsMap';
 import Legends from './pages/Legends';
+import LiveRace from './pages/LiveRace';
 import LiquidHero from './pages/LiquidHero';
 import LiquidHeroConfigurable from './pages/LiquidHeroConfigurable';
 import PrivateRoute from './components/PrivateRoute';
@@ -195,6 +196,8 @@ function AppContent() {
           />
 
           {/* Championship Management */}
+          <Route path="live-race" element={<LiveRace />} />
+          <Route path="live" element={<LiveRace />} />
           <Route path="championship" element={<ChampionshipDashboard />} />
           <Route path="standings/drivers" element={<DriverStandings />} />
           <Route path="standings/constructors" element={<ConstructorStandings />} />
