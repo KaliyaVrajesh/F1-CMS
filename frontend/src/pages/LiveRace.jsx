@@ -162,9 +162,31 @@ const LiveRace = () => {
     }
   };
 
-  // Handle lap scrub in replay mode
+  // Helper to extract events up to a given lap
+  const getEventsUpToLap = (timeline, targetLap) => {
+    const events = [];
+    timeline.slice(0, targetLap).forEach((lapItem) => {
+      lapItem.overtakes.forEach((o) => {
+        events.push({
+          id: `${o.lap}-${o.overtaker.code}`,
+          text: `🏎️ ${o.overtaker.name} (${o.overtaker.code}) overtook ${o.passed.name} for P${o.newPos}!`,
+          time: `Lap ${o.lap}`,
+        });
+      });
+      lapItem.pitStops?.forEach((p) => {
+        events.push({
+          id: `${lapItem.lap}-pit-${p.code}`,
+          text: `🔧 ${p.name} (${p.code}) pitted for new tires.`,
+          time: `Lap ${lapItem.lap}`,
+        });
+      });
+    });
+    return events.reverse().slice(0, 15);
+  };
+
+  // Handle lap scrub in replay mode (acts like a video player progress bar)
   const handleLapScrub = (lapNum) => {
-    const lap = parseInt(lapNum, 10);
+    const lap = Math.max(1, Math.min(totalLaps, parseInt(lapNum, 10)));
     setCurrentLap(lap);
     if (replayTimeline[lap - 1]) {
       const lapPositions = replayTimeline[lap - 1].positions.map((p, idx) => ({
@@ -174,6 +196,12 @@ const LiveRace = () => {
       }));
       setDrivers(lapPositions);
       setLiveDrivers(lapPositions);
+
+      // Show real events for this exact lap
+      const filteredEvents = getEventsUpToLap(replayTimeline, lap);
+      if (filteredEvents.length > 0) {
+        setRaceEvents(filteredEvents);
+      }
     }
   };
 
@@ -294,19 +322,22 @@ const LiveRace = () => {
               </div>
             </div>
 
-            {/* Middle: If GP_REPLAY, Lap Scrubber */}
+            {/* Middle: If GP_REPLAY, Lap Video Progress Scrubber */}
             {activeMode === 'GP_REPLAY' ? (
-              <div className="flex items-center gap-3 flex-1 max-w-md mx-2">
-                <span className="text-xs font-mono text-gray-400 font-bold shrink-0">
-                  LAP {currentLap} / {totalLaps}
-                </span>
+              <div className="flex items-center gap-3 flex-1 max-w-lg mx-2 bg-black/40 px-3 py-1.5 rounded-xl border border-white/10">
+                <div className="text-xs font-mono font-bold shrink-0 text-white flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-f1red animate-pulse" />
+                  <span>LAP {currentLap} / {totalLaps}</span>
+                  <span className="text-gray-500 text-[10px]">({Math.round((currentLap / totalLaps) * 100)}%)</span>
+                </div>
                 <input
                   type="range"
                   min="1"
                   max={totalLaps}
                   value={currentLap}
                   onChange={(e) => handleLapScrub(e.target.value)}
-                  className="w-full h-1.5 bg-white/20 rounded-lg appearance-none cursor-pointer accent-f1red"
+                  className="w-full h-2 bg-white/15 rounded-lg appearance-none cursor-pointer accent-f1red transition-all"
+                  title="Drag to seek race lap"
                 />
               </div>
             ) : (
@@ -393,8 +424,18 @@ const LiveRace = () => {
                 currentLap={currentLap}
                 onOvertake={handleOvertake}
                 onLapChange={(newLap) => {
-                  if (activeMode !== 'GP_REPLAY') {
-                    setCurrentLap(newLap);
+                  const targetLap = Math.min(newLap, totalLaps);
+                  setCurrentLap(targetLap);
+                  if (activeMode === 'GP_REPLAY' && replayTimeline[targetLap - 1]) {
+                    const lapPositions = replayTimeline[targetLap - 1].positions.map((p, idx) => ({
+                      ...p,
+                      lap: targetLap,
+                      progress: (0.99 - idx * 0.016 + 1.0) % 1.0,
+                    }));
+                    setDrivers(lapPositions);
+                    setLiveDrivers(lapPositions);
+                    const updatedEvents = getEventsUpToLap(replayTimeline, targetLap);
+                    if (updatedEvents.length > 0) setRaceEvents(updatedEvents);
                   }
                 }}
                 onPositionsUpdate={setLiveDrivers}

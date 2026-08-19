@@ -53,9 +53,9 @@ const LiveTrackVisualizer = ({
   const [driverRenderPositions, setDriverRenderPositions] = useState([]);
   const lastFrameTimeRef = useRef(performance.now());
   const animFrameIdRef = useRef(null);
-  const lastOvertakeCheckRef = useRef(0);
   const lastTimingSyncRef = useRef(0);
   const highestLapRef = useRef(currentLap || 1);
+  const previousRankOrderRef = useRef([]);
 
   // Sync when currentLap prop changes from scrubber
   useEffect(() => {
@@ -112,7 +112,6 @@ const LiveTrackVisualizer = ({
 
     highestLapRef.current = currentLap;
     const basePositions = drivers.map((d, index) => {
-      // If driver already has a specific progress assigned (e.g. from scrubber), preserve it; otherwise use grid spacing
       let initialProgress = d.progress;
       if (initialProgress === undefined || initialProgress === null) {
         initialProgress = (0.998 - index * 0.0018 + 1.0) % 1.0;
@@ -133,11 +132,11 @@ const LiveTrackVisualizer = ({
         photo: d.photo,
         tire: d.tire || (index % 3 === 0 ? 'SOFT' : index % 2 === 0 ? 'MEDIUM' : 'HARD'),
         paceFactor: pace,
-        isOvertaking: false,
       };
     });
 
     driversStateRef.current = basePositions;
+    previousRankOrderRef.current = basePositions.map((c) => c.id);
     onPositionsUpdate(basePositions);
   }, [drivers, viewMode]);
 
@@ -205,6 +204,7 @@ const LiveTrackVisualizer = ({
           const prevProg = car.progress;
           car.progress = (car.progress + deltaProgress) % 1.0;
 
+          // Cross start/finish line
           if (car.progress < prevProg) {
             car.lap += 1;
             if (car.lap > maxLap) {
@@ -219,27 +219,32 @@ const LiveTrackVisualizer = ({
         if (now - lastTimingSyncRef.current > 100) {
           lastTimingSyncRef.current = now;
           onPositionsUpdate([...state]);
-        }
 
-        // Check overtakes periodically
-        if (now - lastOvertakeCheckRef.current > 600) {
-          lastOvertakeCheckRef.current = now;
-          for (let i = 0; i < count; i++) {
-            for (let j = i + 1; j < count; j++) {
-              const carA = state[i];
-              const carB = state[j];
-              if (
-                carA.paceFactor > carB.paceFactor &&
-                Math.abs(carA.progress - carB.progress) < 0.012 &&
-                !carA.isOvertaking
-              ) {
-                carA.isOvertaking = true;
-                setTimeout(() => {
-                  carA.isOvertaking = false;
-                }, 4000);
-                onOvertake(carA, carB);
+          // In LIVE_TRACK mode: check authentic rank order swaps (no duplicate spamming)
+          if (viewMode === 'LIVE_TRACK') {
+            const sortedCurrent = [...state].sort((a, b) => {
+              if (b.lap !== a.lap) return b.lap - a.lap;
+              return b.progress - a.progress;
+            });
+            const newRankOrder = sortedCurrent.map((c) => c.id);
+            const prevOrder = previousRankOrderRef.current;
+
+            if (prevOrder.length === newRankOrder.length) {
+              for (let pos = 0; pos < newRankOrder.length; pos++) {
+                const driverId = newRankOrder[pos];
+                const prevPos = prevOrder.indexOf(driverId);
+                // If this driver just gained position
+                if (prevPos > pos) {
+                  const passedDriverId = prevOrder[pos];
+                  const overtaker = state.find((c) => c.id === driverId);
+                  const passedCar = state.find((c) => c.id === passedDriverId);
+                  if (overtaker && passedCar) {
+                    onOvertake(overtaker, passedCar);
+                  }
+                }
               }
             }
+            previousRankOrderRef.current = newRankOrder;
           }
         }
       }
