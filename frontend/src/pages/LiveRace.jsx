@@ -49,8 +49,8 @@ const HISTORICAL_REPLAYS = [
 ];
 
 const LiveRace = () => {
-  // Modes: 'COUNTDOWN' | 'PRE_GRID' | 'LIVE_BROADCAST' | 'GP_REPLAY'
-  const [activeMode, setActiveMode] = useState('LIVE_BROADCAST');
+  // Modes: 'COUNTDOWN' | 'LIVE_TRACK' | 'GP_REPLAY'
+  const [activeMode, setActiveMode] = useState('COUNTDOWN');
   // Default to Dutch Grand Prix (Circuit Zandvoort) as upcoming race on Aug 23, 2026!
   const [selectedCircuitKey, setSelectedCircuitKey] = useState('Zandvoort');
   const [circuitDetails, setCircuitDetails] = useState(CIRCUIT_DETAILS.Zandvoort);
@@ -113,7 +113,7 @@ const LiveRace = () => {
     playPaddleShift(1.2);
     const newEvent = {
       id: `${Date.now()}-${overtaker.id}`,
-      text: `🏎️ ${overtaker.name} (${overtaker.code}) overtook ${passedCar.name} (${passedCar.code}) into the turn!`,
+      text: `🏎️ ${overtaker.name} (${overtaker.code}) overtook ${passedCar.name} (${passedCar.code})!`,
       time: `Lap ${overtaker.lap || 1}`,
     };
     setRaceEvents((prev) => [newEvent, ...prev.slice(0, 14)]);
@@ -202,12 +202,10 @@ const LiveRace = () => {
           <div className="flex items-center gap-2 mb-1">
             <span className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-mono font-bold bg-red-500/15 text-f1red border border-red-500/30">
               <span className="w-1.5 h-1.5 rounded-full bg-f1red animate-ping" />
-              {activeMode === 'LIVE_BROADCAST'
-                ? 'LIVE REAL-TIME STREAM'
-                : activeMode === 'PRE_GRID'
-                ? 'PRE-GRID FORMATION'
-                : activeMode === 'COUNTDOWN'
+              {activeMode === 'COUNTDOWN'
                 ? 'PRE-RACE WAITING ROOM'
+                : activeMode === 'LIVE_TRACK'
+                ? 'LIVE REAL-TIME TRACK'
                 : 'OFFICIAL GP REPLAY'}
             </span>
             <span className="text-gray-500 text-xs">·</span>
@@ -221,13 +219,12 @@ const LiveRace = () => {
           </h1>
         </div>
 
-        {/* Mode Selector Tabs */}
+        {/* Mode Selector Tabs (Clean 3 Modes) */}
         <div className="flex items-center gap-1.5 bg-[#090b10] p-1.5 rounded-2xl border border-white/15 shadow-xl">
           {[
-            { mode: 'LIVE_BROADCAST', label: '🔴 Live Broadcast' },
-            { mode: 'PRE_GRID',       label: '🟡 30m Pre-Grid' },
-            { mode: 'COUNTDOWN',      label: '⏱️ Pre-Race Room' },
-            { mode: 'GP_REPLAY',       label: '📼 GP Replay' },
+            { mode: 'COUNTDOWN',  label: '⏱️ Pre-Race Room' },
+            { mode: 'LIVE_TRACK', label: '🔴 Live Track' },
+            { mode: 'GP_REPLAY',  label: '📼 GP Replay' },
           ].map((tab) => (
             <button
               key={tab.mode}
@@ -235,7 +232,7 @@ const LiveRace = () => {
                 playPaddleShift(1.0);
                 setActiveMode(tab.mode);
               }}
-              className={`px-3 py-1.5 rounded-xl font-mono text-xs font-bold transition-all ${
+              className={`px-4 py-2 rounded-xl font-mono text-xs font-bold transition-all ${
                 activeMode === tab.mode
                   ? 'bg-f1red text-white shadow-lg shadow-red-900/30'
                   : 'text-gray-400 hover:text-white hover:bg-white/5'
@@ -253,13 +250,12 @@ const LiveRace = () => {
           nextRaceData={nextRaceData}
           circuitDetails={circuitDetails}
           drivers={drivers}
-          onEnterPreGrid={() => setActiveMode('PRE_GRID')}
-          onEnterLiveStream={() => setActiveMode('LIVE_BROADCAST')}
+          onEnterLiveStream={() => setActiveMode('LIVE_TRACK')}
           onSelectReplay={() => setActiveMode('GP_REPLAY')}
         />
       )}
 
-      {/* ── Mode 2, 3, 4: Live 2D Track Broadcast / Pre-Grid / GP Replay ── */}
+      {/* ── Mode 2, 3: Live 2D Track Telemetry & GP Replay ── */}
       {activeMode !== 'COUNTDOWN' && (
         <>
           {/* ── Playback Controls & Replay Scrubber ── */}
@@ -388,6 +384,7 @@ const LiveRace = () => {
                 flagStatus={flagStatus}
                 viewMode={activeMode}
                 onOvertake={handleOvertake}
+                onLapChange={(newLap) => setCurrentLap(newLap)}
               />
 
               {/* Live Race Event Feed */}

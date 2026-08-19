@@ -34,9 +34,9 @@ const LiveTrackVisualizer = ({
   isPlaying = true,
   simulationSpeed = 1.0,
   flagStatus = 'GREEN', // GREEN | YELLOW | SC | VSC | RED
-  viewMode = 'LIVE_BROADCAST', // LIVE_BROADCAST | PRE_GRID | GP_REPLAY
-  replayLapData = null,
+  viewMode = 'LIVE_BROADCAST', // LIVE_BROADCAST | GP_REPLAY
   onOvertake = () => {},
+  onLapChange = () => {},
 }) => {
   const containerRef = useRef(null);
   const pathRef = useRef(null);
@@ -52,6 +52,7 @@ const LiveTrackVisualizer = ({
   const lastFrameTimeRef = useRef(performance.now());
   const animFrameIdRef = useRef(null);
   const lastOvertakeCheckRef = useRef(0);
+  const highestLapRef = useRef(1);
 
   // Load Circuit SVG file
   useEffect(() => {
@@ -92,39 +93,14 @@ const LiveTrackVisualizer = ({
     }
   }, [svgPathD]);
 
-  // Initialize driver positions based on current view mode
+  // Initialize driver positions
   useEffect(() => {
     if (drivers.length === 0) return;
 
-    if (viewMode === 'PRE_GRID') {
-      const gridPositions = drivers.map((d, index) => {
-        const gridProgress = 0.985 - index * 0.016;
-        const sideOffset = index % 2 === 0 ? -7 : 7;
-        return {
-          id: d.id,
-          code: d.code,
-          name: d.name,
-          team: d.team,
-          color: d.color,
-          number: d.number,
-          progress: (gridProgress + 1.0) % 1.0,
-          speed: 0,
-          lap: 0,
-          lateralOffset: sideOffset,
-          drsOpen: false,
-          photo: d.photo,
-          tire: 'MEDIUM',
-          paceFactor: 1.0,
-        };
-      });
-      driversStateRef.current = gridPositions;
-      return;
-    }
-
-    // Live Broadcast / Replay dynamic positioning
+    highestLapRef.current = 1;
     const basePositions = drivers.map((d, index) => {
       const initialProgress = (1.0 - index * 0.038) % 1.0;
-      const pace = DRIVER_PACE_RATINGS[d.id] || (1.0 - index * 0.003);
+      const pace = DRIVER_PACE_RATINGS[d.id] || 1.0 - index * 0.003;
       return {
         id: d.id,
         code: d.code,
@@ -135,7 +111,6 @@ const LiveTrackVisualizer = ({
         progress: (initialProgress + 1.0) % 1.0,
         speed: 240,
         lap: 1,
-        lateralOffset: 0,
         drsOpen: false,
         photo: d.photo,
         tire: index % 3 === 0 ? 'SOFT' : index % 2 === 0 ? 'MEDIUM' : 'HARD',
@@ -164,7 +139,7 @@ const LiveTrackVisualizer = ({
     [circuitDetails]
   );
 
-  // 60FPS Physics & Dynamic Overtaking Loop
+  // 60FPS Physics & Dynamic Overtaking Loop (Strictly locked to track centerline)
   useEffect(() => {
     if (!pathRef.current || trackLength === 0) return;
 
@@ -175,7 +150,7 @@ const LiveTrackVisualizer = ({
       const dt = Math.min((now - lastFrameTimeRef.current) / 1000, 0.1);
       lastFrameTimeRef.current = now;
 
-      if (isPlaying && flagStatus !== 'RED' && viewMode !== 'PRE_GRID') {
+      if (isPlaying && flagStatus !== 'RED') {
         const state = driversStateRef.current;
         const count = state.length;
 
@@ -184,17 +159,17 @@ const LiveTrackVisualizer = ({
         if (flagStatus === 'VSC') paceModifier *= 0.60;
         if (flagStatus === 'YELLOW') paceModifier *= 0.80;
 
-        // Check slipstreaming, DRS activation, and overtakes
+        let maxLap = highestLapRef.current;
+
         for (let i = 0; i < count; i++) {
           const car = state[i];
           let hasDrsBoost = false;
 
-          // Look for car ahead within DRS detection range (0.015 to 0.035 progress)
+          // Check if car behind has DRS slipstream on car ahead
           for (let j = 0; j < count; j++) {
             if (i !== j) {
               const diff = (state[j].progress - car.progress + 1.0) % 1.0;
               if (diff > 0.005 && diff < 0.032) {
-                // Within DRS range!
                 hasDrsBoost = true;
                 break;
               }
@@ -206,28 +181,19 @@ const LiveTrackVisualizer = ({
           car.speed = dynamicSpeed;
           car.drsOpen = isDrs && flagStatus === 'GREEN';
 
-          // Move car forward on track
+          // Progress forward strictly along track spline
           const deltaProgress = (dynamicSpeed / 300) * paceModifier * dt;
           const prevProg = car.progress;
           car.progress = (car.progress + deltaProgress) % 1.0;
 
           if (car.progress < prevProg) {
             car.lap += 1;
-          }
-        }
-
-        // Dynamic lateral lane positioning for wheel-to-wheel battles
-        for (let i = 0; i < count; i++) {
-          let overlapCount = 0;
-          for (let j = 0; j < count; j++) {
-            if (i !== j) {
-              const dist = Math.abs(state[i].progress - state[j].progress);
-              if (dist < 0.018 || dist > 0.982) {
-                overlapCount += i > j ? 1 : -1;
-              }
+            if (car.lap > maxLap) {
+              maxLap = car.lap;
+              highestLapRef.current = maxLap;
+              onLapChange(maxLap);
             }
           }
-          state[i].lateralOffset = overlapCount * 13;
         }
 
         // Check overtakes periodically (every 500ms)
@@ -237,7 +203,6 @@ const LiveTrackVisualizer = ({
             for (let j = i + 1; j < count; j++) {
               const carA = state[i];
               const carB = state[j];
-              // If Car A (behind) just passed Car B
               if (
                 carA.paceFactor > carB.paceFactor &&
                 Math.abs(carA.progress - carB.progress) < 0.012 &&
@@ -254,26 +219,15 @@ const LiveTrackVisualizer = ({
         }
       }
 
-      // Compute visual screen coordinates (x, y, angle) from SVG path
+      // Compute exact (x, y) coordinates locked strictly to the track path
       const computedRenderPositions = driversStateRef.current.map((car) => {
         const currentDist = car.progress * trackLength;
         const pt = svgPath.getPointAtLength(Math.max(0, Math.min(trackLength, currentDist)));
 
-        // Normal tangent vector for lateral offset
-        const aheadDist = (currentDist + 2) % trackLength;
-        const ptAhead = svgPath.getPointAtLength(aheadDist);
-        const dx = ptAhead.x - pt.x;
-        const dy = ptAhead.y - pt.y;
-        const angle = Math.atan2(dy, dx);
-
-        const perpX = -Math.sin(angle) * (car.lateralOffset || 0);
-        const perpY = Math.cos(angle) * (car.lateralOffset || 0);
-
         return {
           ...car,
-          x: pt.x + perpX,
-          y: pt.y + perpY,
-          angle: (angle * 180) / Math.PI,
+          x: pt.x,
+          y: pt.y,
         };
       });
 
@@ -285,7 +239,7 @@ const LiveTrackVisualizer = ({
     return () => {
       if (animFrameIdRef.current) cancelAnimationFrame(animFrameIdRef.current);
     };
-  }, [trackLength, isPlaying, simulationSpeed, flagStatus, calculateSpeedAtProgress, circuitDetails, viewMode, onOvertake]);
+  }, [trackLength, isPlaying, simulationSpeed, flagStatus, calculateSpeedAtProgress, circuitDetails, viewMode, onOvertake, onLapChange]);
 
   // Compute Turn corner (x, y) coordinates for pill badges
   const turnMarkers = useMemo(() => {
@@ -358,16 +312,8 @@ const LiveTrackVisualizer = ({
         </button>
       </div>
 
-      {/* Pre-Grid Formation Overlay Banner */}
-      {viewMode === 'PRE_GRID' && (
-        <div className="absolute top-4 left-4 z-30 px-4 py-2 rounded-xl bg-amber-500/20 border border-amber-500/40 text-amber-400 font-mono font-black text-xs uppercase tracking-widest backdrop-blur-md shadow-lg flex items-center gap-2">
-          <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-ping" />
-          <span>30-MIN PRE-GRID FORMATION · PIT LANE OPEN</span>
-        </div>
-      )}
-
       {/* Flag Status Banner Alert */}
-      {flagStatus !== 'GREEN' && viewMode !== 'PRE_GRID' && (
+      {flagStatus !== 'GREEN' && (
         <div
           className="absolute top-4 left-4 z-30 px-4 py-1.5 rounded-xl font-mono font-black text-xs uppercase tracking-widest flex items-center gap-2 backdrop-blur-md shadow-lg border"
           style={{
@@ -523,7 +469,7 @@ const LiveTrackVisualizer = ({
             </g>
           ))}
 
-          {/* Driver Position Dots on Track */}
+          {/* Driver Position Dots on Track (Strictly locked to centerline) */}
           {driverRenderPositions.map((car) => {
             const isSelected = selectedDriverId === car.id;
             const isHovered = hoveredDriver?.id === car.id;

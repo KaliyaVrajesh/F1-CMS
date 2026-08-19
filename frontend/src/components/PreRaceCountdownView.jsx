@@ -6,7 +6,6 @@ const PreRaceCountdownView = ({
   nextRaceData,
   circuitDetails,
   drivers = [],
-  onEnterPreGrid = () => {},
   onEnterLiveStream = () => {},
   onSelectReplay = () => {},
 }) => {
@@ -45,39 +44,68 @@ const PreRaceCountdownView = ({
     return () => clearInterval(interval);
   }, [nextRaceData]);
 
+  // Helper to dynamically calculate if session is UPCOMING, LIVE NOW, or COMPLETED
+  const getSessionStatus = (sessionDateStr, sessionTimeStr) => {
+    if (!sessionDateStr) return 'UPCOMING';
+    const start = new Date(`${sessionDateStr}T${sessionTimeStr || '12:00:00Z'}`).getTime();
+    const now = Date.now();
+    const end = start + 3600000 * 2; // ~2 hours duration
+
+    if (now < start) return 'UPCOMING';
+    if (now >= start && now <= end) return 'LIVE NOW';
+    return 'COMPLETED';
+  };
+
   // Dynamic weekend timetable based on official race data
-  const scheduleSessions = useMemo(() => [
-    {
-      session: 'PRACTICE 1',
-      date: nextRaceData?.firstPractice?.date ? new Date(nextRaceData.firstPractice.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) : 'Fri, Aug 21',
-      time: nextRaceData?.firstPractice?.time ? `${nextRaceData.firstPractice.time.substring(0, 5)} UTC` : '10:30 UTC',
-      status: 'COMPLETED',
-    },
-    {
-      session: 'SPRINT / QUALIFYING',
-      date: nextRaceData?.sprintQualifying?.date ? new Date(nextRaceData.sprintQualifying.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) : 'Fri, Aug 21',
-      time: nextRaceData?.sprintQualifying?.time ? `${nextRaceData.sprintQualifying.time.substring(0, 5)} UTC` : '14:30 UTC',
-      status: 'COMPLETED',
-    },
-    {
-      session: 'SPRINT RACE',
-      date: nextRaceData?.sprint?.date ? new Date(nextRaceData.sprint.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) : 'Sat, Aug 22',
-      time: nextRaceData?.sprint?.time ? `${nextRaceData.sprint.time.substring(0, 5)} UTC` : '10:00 UTC',
-      status: 'COMPLETED',
-    },
-    {
-      session: 'QUALIFYING',
-      date: nextRaceData?.qualifying?.date ? new Date(nextRaceData.qualifying.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) : 'Sat, Aug 22',
-      time: nextRaceData?.qualifying?.time ? `${nextRaceData.qualifying.time.substring(0, 5)} UTC` : '14:00 UTC',
-      status: 'COMPLETED',
-    },
-    {
-      session: 'GRAND PRIX',
-      date: nextRaceData?.date ? new Date(nextRaceData.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) : 'Sun, Aug 23',
-      time: nextRaceData?.time ? `${nextRaceData.time.substring(0, 5)} UTC LIGHTS OUT` : '13:00 UTC LIGHTS OUT',
-      status: 'UPCOMING',
-    },
-  ], [nextRaceData]);
+  const scheduleSessions = useMemo(() => {
+    const fp1Date = nextRaceData?.firstPractice?.date || '2026-08-21';
+    const fp1Time = nextRaceData?.firstPractice?.time || '10:30:00Z';
+    const sqDate  = nextRaceData?.sprintQualifying?.date || '2026-08-21';
+    const sqTime  = nextRaceData?.sprintQualifying?.time || '14:30:00Z';
+    const sDate   = nextRaceData?.sprint?.date || '2026-08-22';
+    const sTime   = nextRaceData?.sprint?.time || '10:00:00Z';
+    const qDate   = nextRaceData?.qualifying?.date || '2026-08-22';
+    const qTime   = nextRaceData?.qualifying?.time || '14:00:00Z';
+    const gpDate  = nextRaceData?.date || '2026-08-23';
+    const gpTime  = nextRaceData?.time || '13:00:00Z';
+
+    return [
+      {
+        session: 'PRACTICE 1',
+        date: new Date(fp1Date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }),
+        time: `${fp1Time.substring(0, 5)} UTC`,
+        status: getSessionStatus(fp1Date, fp1Time),
+      },
+      {
+        session: 'SPRINT / QUALIFYING',
+        date: new Date(sqDate).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }),
+        time: `${sqTime.substring(0, 5)} UTC`,
+        status: getSessionStatus(sqDate, sqTime),
+      },
+      {
+        session: 'SPRINT RACE',
+        date: new Date(sDate).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }),
+        time: `${sTime.substring(0, 5)} UTC`,
+        status: getSessionStatus(sDate, sTime),
+      },
+      {
+        session: 'QUALIFYING',
+        date: new Date(qDate).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }),
+        time: `${qTime.substring(0, 5)} UTC`,
+        status: getSessionStatus(qDate, qTime),
+      },
+      {
+        session: 'GRAND PRIX',
+        date: new Date(gpDate).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }),
+        time: `${gpTime.substring(0, 5)} UTC LIGHTS OUT`,
+        status: getSessionStatus(gpDate, gpTime),
+      },
+    ];
+  }, [nextRaceData]);
+
+  // Check if qualifying is done
+  const qualifyingDateStr = nextRaceData?.qualifying?.date || '2026-08-22';
+  const isQualifyingDone = Date.now() > new Date(qualifyingDateStr).getTime() + 7200000;
 
   return (
     <div className="w-full space-y-8">
@@ -128,7 +156,7 @@ const PreRaceCountdownView = ({
             ))}
           </div>
 
-          {/* ── Live Action Buttons ── */}
+          {/* ── Action Buttons ── */}
           <div className="flex flex-wrap items-center justify-center gap-4 pt-4">
             <button
               onClick={() => {
@@ -138,17 +166,7 @@ const PreRaceCountdownView = ({
               className="px-6 py-3 rounded-2xl bg-f1red hover:bg-red-700 text-white font-f1heading font-black text-sm uppercase tracking-wider shadow-lg shadow-red-900/30 transition-all flex items-center gap-2"
             >
               <span className="w-2.5 h-2.5 rounded-full bg-white animate-ping" />
-              <span>Launch Live 2D Stream</span>
-            </button>
-
-            <button
-              onClick={() => {
-                playPaddleShift(1.0);
-                onEnterPreGrid();
-              }}
-              className="px-6 py-3 rounded-2xl bg-amber-500 hover:bg-amber-600 text-black font-f1heading font-black text-sm uppercase tracking-wider shadow-lg shadow-amber-900/20 transition-all flex items-center gap-2"
-            >
-              <span>🟡 30-Min Pre-Grid Lineup</span>
+              <span>Launch Live 2D Track Telemetry</span>
             </button>
 
             <button
@@ -158,13 +176,13 @@ const PreRaceCountdownView = ({
               }}
               className="px-6 py-3 rounded-2xl bg-white/10 hover:bg-white/20 border border-white/15 text-white font-mono text-xs font-bold uppercase tracking-wider transition-all"
             >
-              📼 Watch GP Race Replays
+              📼 Watch Past GP Replays
             </button>
           </div>
         </div>
       </motion.div>
 
-      {/* ── Weekend Schedule & Starting Grid Lineup ── */}
+      {/* ── Weekend Schedule & Official Entry List ── */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         {/* Left: Weekend Timetable & Weather Forecast */}
         <div className="lg:col-span-5 space-y-6">
@@ -186,8 +204,10 @@ const PreRaceCountdownView = ({
                   </div>
                   <span
                     className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                      s.status === 'UPCOMING'
-                        ? 'bg-f1red/20 text-f1red border border-f1red/40 animate-pulse'
+                      s.status === 'LIVE NOW'
+                        ? 'bg-green-500/20 text-green-400 border border-green-500/40 animate-pulse'
+                        : s.status === 'UPCOMING'
+                        ? 'bg-amber-500/15 text-amber-400 border border-amber-500/30'
                         : 'bg-white/5 text-gray-400'
                     }`}
                   >
@@ -227,81 +247,72 @@ const PreRaceCountdownView = ({
           </div>
         </div>
 
-        {/* Right: Official Starting Grid Lineup (P1 to P20) */}
+        {/* Right: Official Drivers Entry List */}
         <div className="lg:col-span-7 p-6 rounded-3xl bg-[#090b10] border border-white/10 shadow-xl space-y-4">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between flex-wrap gap-2">
             <div className="flex items-center gap-2">
-              <span className="text-lg">🏁</span>
+              <span className="text-lg">🏎️</span>
               <h3 className="text-sm font-mono font-black text-white uppercase tracking-widest">
-                OFFICIAL STARTING GRID LINEUP
+                {isQualifyingDone ? 'OFFICIAL STARTING GRID LINEUP' : '2026 DRIVERS CHAMPIONSHIP ENTRY LIST'}
               </h3>
             </div>
-            <span className="text-xs font-mono text-gray-400">POLE TO P20</span>
+            <span className="text-[11px] font-mono text-amber-400 bg-amber-500/10 px-2.5 py-0.5 rounded-lg border border-amber-500/20">
+              {isQualifyingDone ? 'GRID LOCKED' : 'AWAITING QUALIFYING (SAT, AUG 22)'}
+            </span>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-[460px] overflow-y-auto pr-1">
-            {drivers.map((driver, idx) => {
-              const isPole = idx === 0;
-              return (
-                <div
-                  key={driver.id}
-                  className="p-2.5 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-between relative overflow-hidden"
-                  style={{ borderLeftColor: driver.color, borderLeftWidth: '4px' }}
-                >
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <span
-                      className="w-5 text-center text-xs font-mono font-black shrink-0"
-                      style={{ color: isPole ? '#FFD700' : '#FFFFFF' }}
-                    >
-                      {idx + 1}
-                    </span>
+            {drivers.map((driver, idx) => (
+              <div
+                key={driver.id}
+                className="p-2.5 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-between relative overflow-hidden"
+                style={{ borderLeftColor: driver.color, borderLeftWidth: '4px' }}
+              >
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <span className="w-5 text-center text-xs font-mono font-black shrink-0 text-gray-400">
+                    {idx + 1}
+                  </span>
 
-                    <div
-                      className="w-7 h-7 rounded-full overflow-hidden shrink-0 border flex items-center justify-center bg-black/40"
-                      style={{ borderColor: `${driver.color}60` }}
-                    >
-                      {driver.photo ? (
-                        <img
-                          src={driver.photo}
-                          alt={driver.name}
-                          className="w-full h-full object-cover object-top"
-                          onError={(e) => {
-                            e.currentTarget.style.display = 'none';
-                          }}
-                        />
-                      ) : (
-                        <span className="text-[9px] font-black" style={{ color: driver.color }}>
-                          {driver.code}
-                        </span>
-                      )}
-                    </div>
-
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-1">
-                        <span className="text-xs font-f1heading font-black text-white truncate">
-                          {driver.name}
-                        </span>
-                        {isPole && (
-                          <span className="px-1 py-0.2 rounded bg-amber-500/20 text-amber-400 text-[8px] font-bold">
-                            POLE
-                          </span>
-                        )}
-                      </div>
-                      <div
-                        className="text-[9px] font-mono uppercase font-bold truncate"
-                        style={{ color: driver.color }}
-                      >
-                        {driver.team}
-                      </div>
-                    </div>
+                  <div
+                    className="w-7 h-7 rounded-full overflow-hidden shrink-0 border flex items-center justify-center bg-black/40"
+                    style={{ borderColor: `${driver.color}60` }}
+                  >
+                    {driver.photo ? (
+                      <img
+                        src={driver.photo}
+                        alt={driver.name}
+                        className="w-full h-full object-cover object-top"
+                        onError={(e) => {
+                          e.currentTarget.style.display = 'none';
+                        }}
+                      />
+                    ) : (
+                      <span className="text-[9px] font-black" style={{ color: driver.color }}>
+                        {driver.code}
+                      </span>
+                    )}
                   </div>
 
-                  <span className="text-xs font-mono font-bold text-gray-400 shrink-0">
-                    #{driver.number}
-                  </span>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1">
+                      <span className="text-xs font-f1heading font-black text-white truncate">
+                        {driver.name}
+                      </span>
+                    </div>
+                    <div
+                      className="text-[9px] font-mono uppercase font-bold truncate"
+                      style={{ color: driver.color }}
+                    >
+                      {driver.team}
+                    </div>
+                  </div>
                 </div>
-              );
-            })}
+
+                <span className="text-xs font-mono font-bold text-gray-400 shrink-0">
+                  #{driver.number}
+                </span>
+              </div>
+            ))}
           </div>
         </div>
       </div>
