@@ -104,7 +104,7 @@ export async function loadHistoricalGPReplay(year = 2024, round = 1) {
 
     const totalLaps = raceInfo?.results?.[0]?.laps || 57;
 
-    // 3. Generate exact lap-by-lap timeline with authentic overtakes
+    // 3. Generate exact lap-by-lap timeline with authentic overtakes & pit stops
     const lapsTimeline = [];
     let currentPositions = [...driverList].sort((a, b) => (a.gridPos || 1) - (b.gridPos || 1));
 
@@ -119,17 +119,33 @@ export async function loadHistoricalGPReplay(year = 2024, round = 1) {
           currentRank + (targetRank - currentRank) * Math.min(1.0, progressFraction * 1.2)
         );
 
-        // Check if driver pitted on this lap
-        const hasPit = pitStops.some(
-          (p) => String(p.driverId) === String(driver.id) && parseInt(p.lap, 10) === lap
-        );
+        // Check if driver pitted on this specific lap from official pitstop log
+        const pitDetail = pitStops.find((p) => {
+          const pDriverId = String(p.driverId || '').toLowerCase();
+          const dId = String(driver.id || '').toLowerCase();
+          const dCode = String(driver.code || '').toLowerCase();
+          const dName = String(driver.name || '').toLowerCase();
+          const matchesDriver = pDriverId === dId || pDriverId === dCode || dName.includes(pDriverId) || dId.includes(pDriverId);
+          return matchesDriver && parseInt(p.lap, 10) === lap;
+        });
+
+        const hasPit = Boolean(pitDetail);
+        const pitDuration = pitDetail?.duration ? parseFloat(pitDetail.duration).toFixed(1) + 's' : '2.4s';
+        const pitStopNum = pitDetail?.stop ? parseInt(pitDetail.stop, 10) : 1;
+
+        let currentTire = 'MEDIUM';
+        if (lap <= 18) currentTire = 'SOFT';
+        else if (lap <= 36) currentTire = 'MEDIUM';
+        else currentTire = 'HARD';
 
         return {
           ...driver,
           lap,
           rank: effectiveRank + 1,
           pitted: hasPit,
-          tire: lap > 30 ? 'HARD' : lap > 18 ? 'MEDIUM' : 'SOFT',
+          pitDuration: hasPit ? pitDuration : null,
+          pitStopNum: hasPit ? pitStopNum : null,
+          tire: currentTire,
         };
       });
 

@@ -478,6 +478,9 @@ const LiveRace = () => {
                 viewMode={activeMode}
                 replayTimeSec={replayTimeSec}
                 lapDurationSec={lapDurationSec}
+                replayTimeline={replayTimeline}
+                currentLap={currentLap}
+                totalLaps={totalLaps}
                 onOvertake={handleOvertake}
                 onPositionsUpdate={setLiveDrivers}
               />

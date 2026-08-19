@@ -54,7 +54,9 @@ const LiveTimingTower = ({
 
           // Compute real dynamic time gap based on track progress and authentic lap time
           let intervalDisplay = 'LEADER';
-          if (!isLeader && leader) {
+          if (driver.inPit || driver.pitState === 'IN_BOX') {
+            intervalDisplay = driver.pitState === 'IN_BOX' ? '🔧 BOX 2.4s' : '🔧 IN PIT';
+          } else if (!isLeader && leader) {
             const lapDiff = (leader.lap || 1) - (driver.lap || 1);
             let progressDiff = (leader.progress || 0) - (driver.progress || 0);
             if (progressDiff < 0) progressDiff += 1.0;
@@ -72,7 +74,7 @@ const LiveTimingTower = ({
           // Format benchmark lap time
           const baseMinutes = Math.floor(lapDurationSec / 60);
           const baseSecs = (lapDurationSec % 60 + index * 0.18).toFixed(3);
-          const formattedLapTime = `${baseMinutes}:${baseSecs < 10 ? '0' : ''}${baseSecs}`;
+          const formattedLapTime = driver.inPit ? 'PIT LANE' : `${baseMinutes}:${baseSecs < 10 ? '0' : ''}${baseSecs}`;
 
           return (
             <motion.div
@@ -145,7 +147,7 @@ const LiveTimingTower = ({
               {/* Right: Tires, DRS, Gap */}
               <div className="flex items-center gap-2.5 shrink-0">
                 {/* DRS Active badge */}
-                {driver.drsOpen && (
+                {driver.drsOpen && !driver.inPit && (
                   <span className="px-1 py-0.2 rounded bg-amber-500/20 text-amber-400 text-[9px] font-mono font-bold">
                     DRS
                   </span>
@@ -162,12 +164,18 @@ const LiveTimingTower = ({
 
                 {/* Gap / Interval */}
                 <div className="w-16 text-right">
-                  <div
-                    className="text-xs font-mono font-bold tabular-nums"
-                    style={{ color: isLeader ? '#FFD700' : '#CCCCCC' }}
-                  >
-                    {intervalDisplay}
-                  </div>
+                  {driver.inPit ? (
+                    <span className="inline-block px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 border border-amber-500/30 text-[9px] font-mono font-bold animate-pulse">
+                      {driver.pitState === 'IN_BOX' ? 'BOX' : 'PIT'}
+                    </span>
+                  ) : (
+                    <div
+                      className="text-xs font-mono font-bold tabular-nums"
+                      style={{ color: isLeader ? '#FFD700' : '#CCCCCC' }}
+                    >
+                      {intervalDisplay}
+                    </div>
+                  )}
                   <div className="text-[9px] font-mono text-gray-500 tabular-nums">
                     {formattedLapTime}
                   </div>

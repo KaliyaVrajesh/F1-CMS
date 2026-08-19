@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { playPaddleShift } from '../utils/audio';
+import { getTeamName } from '../utils/teamColors';
 
 const PreRaceCountdownView = ({
   nextRaceData,
@@ -303,7 +304,7 @@ const PreRaceCountdownView = ({
                       className="text-[9px] font-mono uppercase font-bold truncate"
                       style={{ color: driver.color }}
                     >
-                      {driver.team}
+                      {getTeamName(driver.team, driver) || (typeof driver.team === 'string' ? driver.team : 'F1 Team')}
                     </div>
                   </div>
                 </div>

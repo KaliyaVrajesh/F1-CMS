@@ -1,4 +1,5 @@
 import { motion, AnimatePresence } from 'framer-motion';
+import { getTeamName } from '../utils/teamColors';
 
 const LiveRaceHUD = ({
   circuitDetails,
@@ -9,12 +10,15 @@ const LiveRaceHUD = ({
   onDeselectDriver = () => {},
 }) => {
   // Speed, Gear, and RPM computation for focused driver
-  const speed = selectedDriver?.speed ? Math.round(selectedDriver.speed) : 285;
-  const gear = speed > 290 ? 8 : speed > 250 ? 7 : speed > 210 ? 6 : speed > 170 ? 5 : speed > 130 ? 4 : speed > 90 ? 3 : 2;
-  const rpm = Math.min(12500, Math.round(7000 + (speed / 330) * 5500));
-  const throttle = Math.min(100, Math.round((speed / 320) * 100));
-  const brake = speed < 140 ? Math.round((1 - speed / 140) * 100) : 0;
-  const isDrs = selectedDriver?.drsOpen || false;
+  const isPit = selectedDriver?.inPit || false;
+  const isStationaryBox = selectedDriver?.pitState === 'IN_BOX';
+  const speed = selectedDriver?.speed !== undefined ? Math.round(selectedDriver.speed) : 285;
+  const gear = isStationaryBox ? 1 : speed > 290 ? 8 : speed > 250 ? 7 : speed > 210 ? 6 : speed > 170 ? 5 : speed > 130 ? 4 : speed > 90 ? 3 : 2;
+  const rpm = isStationaryBox ? 4500 : Math.min(12500, Math.round(7000 + (speed / 330) * 5500));
+  const throttle = isStationaryBox ? 0 : Math.min(100, Math.round((speed / 320) * 100));
+  const brake = isStationaryBox ? 100 : speed < 140 ? Math.round((1 - speed / 140) * 100) : 0;
+  const isDrs = selectedDriver?.drsOpen && !isPit;
+  const teamDisplayName = selectedDriver ? getTeamName(selectedDriver.team, selectedDriver) || (typeof selectedDriver.team === 'string' ? selectedDriver.team : 'F1 Team') : '';
 
   return (
     <div className="w-full space-y-4">
@@ -140,7 +144,7 @@ const LiveRaceHUD = ({
                     </span>
                   </div>
                   <p className="text-xs font-mono font-bold uppercase" style={{ color: selectedDriver.color }}>
-                    {selectedDriver.team} · COCKPIT TELEMETRY
+                    {teamDisplayName} · {isStationaryBox ? 'STATIONARY PIT BOX (2.4s)' : isPit ? 'PIT LANE LIMITER (80 KM/H)' : 'COCKPIT TELEMETRY'}
                   </p>
                 </div>
               </div>
