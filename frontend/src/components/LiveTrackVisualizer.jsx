@@ -35,6 +35,7 @@ const LiveTrackVisualizer = ({
   simulationSpeed = 1.0,
   flagStatus = 'GREEN', // GREEN | YELLOW | SC | VSC | RED
   viewMode = 'LIVE_TRACK', // LIVE_TRACK | GP_REPLAY
+  currentLap = 1,
   onOvertake = () => {},
   onLapChange = () => {},
   onPositionsUpdate = () => {},
@@ -54,7 +55,17 @@ const LiveTrackVisualizer = ({
   const animFrameIdRef = useRef(null);
   const lastOvertakeCheckRef = useRef(0);
   const lastTimingSyncRef = useRef(0);
-  const highestLapRef = useRef(1);
+  const highestLapRef = useRef(currentLap || 1);
+
+  // Sync when currentLap prop changes from scrubber
+  useEffect(() => {
+    highestLapRef.current = currentLap;
+    if (driversStateRef.current && driversStateRef.current.length > 0) {
+      driversStateRef.current.forEach((car) => {
+        car.lap = currentLap;
+      });
+    }
+  }, [currentLap]);
 
   // Load Circuit SVG file
   useEffect(() => {
@@ -95,14 +106,18 @@ const LiveTrackVisualizer = ({
     }
   }, [svgPathD]);
 
-  // Initialize driver positions - TIGHTLY BUNCHED AT START LINE
+  // Initialize driver positions - handles both initial grid start and lap scrubber updates
   useEffect(() => {
     if (drivers.length === 0) return;
 
-    highestLapRef.current = 1;
+    highestLapRef.current = currentLap;
     const basePositions = drivers.map((d, index) => {
-      // Grid start spacing: Tight 8-meter staggered pack right behind start line
-      const initialProgress = (0.998 - index * 0.0018 + 1.0) % 1.0;
+      // If driver already has a specific progress assigned (e.g. from scrubber), preserve it; otherwise use grid spacing
+      let initialProgress = d.progress;
+      if (initialProgress === undefined || initialProgress === null) {
+        initialProgress = (0.998 - index * 0.0018 + 1.0) % 1.0;
+      }
+
       const pace = DRIVER_PACE_RATINGS[d.id] || 1.0 - index * 0.002;
       return {
         id: d.id,
@@ -113,10 +128,10 @@ const LiveTrackVisualizer = ({
         number: d.number,
         progress: initialProgress,
         speed: 245,
-        lap: 1,
+        lap: d.lap || currentLap || 1,
         drsOpen: false,
         photo: d.photo,
-        tire: index % 3 === 0 ? 'SOFT' : index % 2 === 0 ? 'MEDIUM' : 'HARD',
+        tire: d.tire || (index % 3 === 0 ? 'SOFT' : index % 2 === 0 ? 'MEDIUM' : 'HARD'),
         paceFactor: pace,
         isOvertaking: false,
       };
@@ -170,7 +185,6 @@ const LiveTrackVisualizer = ({
           const car = state[i];
           let hasDrsBoost = false;
 
-          // Check if car behind has DRS slipstream on car ahead
           for (let j = 0; j < count; j++) {
             if (i !== j) {
               const diff = (state[j].progress - car.progress + 1.0) % 1.0;
@@ -186,7 +200,6 @@ const LiveTrackVisualizer = ({
           car.speed = dynamicSpeed;
           car.drsOpen = isDrs && flagStatus === 'GREEN';
 
-          // Progress forward strictly along track spline
           const speedRatio = dynamicSpeed / 240.0;
           const deltaProgress = paceScale * speedRatio * dt;
           const prevProg = car.progress;

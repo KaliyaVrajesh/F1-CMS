@@ -167,7 +167,13 @@ const LiveRace = () => {
     const lap = parseInt(lapNum, 10);
     setCurrentLap(lap);
     if (replayTimeline[lap - 1]) {
-      setDrivers(replayTimeline[lap - 1].positions);
+      const lapPositions = replayTimeline[lap - 1].positions.map((p, idx) => ({
+        ...p,
+        lap,
+        progress: (0.99 - idx * 0.016 + 1.0) % 1.0,
+      }));
+      setDrivers(lapPositions);
+      setLiveDrivers(lapPositions);
     }
   };
 
@@ -384,8 +390,13 @@ const LiveRace = () => {
                 simulationSpeed={simulationSpeed}
                 flagStatus={flagStatus}
                 viewMode={activeMode}
+                currentLap={currentLap}
                 onOvertake={handleOvertake}
-                onLapChange={(newLap) => setCurrentLap(newLap)}
+                onLapChange={(newLap) => {
+                  if (activeMode !== 'GP_REPLAY') {
+                    setCurrentLap(newLap);
+                  }
+                }}
                 onPositionsUpdate={setLiveDrivers}
               />
 
