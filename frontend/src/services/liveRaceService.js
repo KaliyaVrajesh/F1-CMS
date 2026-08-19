@@ -137,7 +137,9 @@ export async function loadHistoricalGPReplay(year = 2024, round = 1) {
         });
 
         let rank;
-        if (timing && timing.position) {
+        if (lap === 1 && (!timing || !timing.position)) {
+          rank = driver.gridPos || 1;
+        } else if (timing && timing.position) {
           rank = parseInt(timing.position, 10);
         } else {
           // Accurate interpolation between starting grid and finish position
@@ -196,9 +198,10 @@ export async function loadHistoricalGPReplay(year = 2024, round = 1) {
           d.gapToLeaderSec = 0.0;
           d.intervalToCarAheadSec = 0.0;
         } else {
-          const baseDelta = 0.8 + (idx * 0.45) + (Math.sin(idx * 1.5 + lap * 0.3) * 0.35);
+          const lapSpreadMultiplier = Math.min(1.0, (lap - 1) / 2.5 + 0.2);
+          const baseDelta = (0.4 + (idx * 0.35) + (Math.sin(idx * 1.5 + lap * 0.3) * 0.25)) * lapSpreadMultiplier;
           const prevGap = lapPositions[idx - 1].gapToLeaderSec || 0;
-          d.intervalToCarAheadSec = Math.max(0.2, baseDelta);
+          d.intervalToCarAheadSec = Math.max(0.1, baseDelta);
           d.gapToLeaderSec = prevGap + d.intervalToCarAheadSec;
         }
       });

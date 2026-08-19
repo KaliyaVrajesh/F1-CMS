@@ -256,34 +256,54 @@ const LiveTrackVisualizer = ({
       // ── GP_REPLAY MODE: Telemetry timeline mapping strictly from authentic lap standings ──
       if (viewMode === 'GP_REPLAY') {
         const currentLapNum = Math.min(totalLaps, Math.max(1, Math.floor(replayTimeSec / lapDuration) + 1));
-        const leaderProg = (replayTimeSec % lapDuration) / lapDuration;
+        const lapProgressFraction = (replayTimeSec % lapDuration) / lapDuration;
         const currentLapTimeline = replayTimeline[currentLapNum - 1];
+
+        // At Lap 1 start (t=0 on the grid), order is starting grid. Then transitions to lap standings.
         const lapStandings = currentLapTimeline?.positions || driversStateRef.current;
+
+        // Dynamic field spread factor:
+        // At t=0 (Grid start): all 20 cars are lined up on the starting straight in tight formation!
+        // During Lap 1-2: the pack launches into Turn 1 and naturally stretches out into race gaps.
+        const totalRaceProgressTime = replayTimeSec;
+        const spreadExpansionDuration = lapDuration * 1.6; // Stretches over ~1.5 laps
+        const spreadFactor = Math.min(1.0, Math.max(0.0, totalRaceProgressTime / spreadExpansionDuration));
+
+        // Leader progress on circuit (starts at grid slot 0.998 at t=0, moves forward around circuit)
+        const leaderProg = (0.998 + (replayTimeSec / lapDuration)) % 1.0;
 
         const updatedState = [];
 
         lapStandings.forEach((standing, rankIdx) => {
           // Find or initialize matching car in state ref
           let car = driversStateRef.current.find(
-            (c) => String(c.id).toLowerCase() === String(standing.id).toLowerCase() || String(c.code).toLowerCase() === String(standing.code).toLowerCase()
+            (c) =>
+              String(c.id).toLowerCase() === String(standing.id).toLowerCase() ||
+              String(c.code).toLowerCase() === String(standing.code).toLowerCase()
           );
 
           if (!car) {
             car = { ...standing, progress: 0, speed: 250, pitState: 'NONE', pitLaneOffset: 0 };
           }
 
-          // Compute accurate cumulative circuit gap (spreads field across the track)
-          const gapSec = standing.gapToLeaderSec !== undefined ? standing.gapToLeaderSec : rankIdx * 2.8;
-          const gapFraction = (gapSec / lapDuration) % 1.0;
-          let carProg = (leaderProg - gapFraction + 1.0) % 1.0;
+          // Starting grid slot spacing: ~0.0024 per car (tight 2x2 grid on start-finish straight)
+          const gridGapFraction = rankIdx * 0.0024;
 
-          // Check if driver pitted on this lap
-          const pitData = currentLapTimeline?.pitStops?.find(
+          // Full race gap fraction (spreads field across the track on later laps)
+          const fullGapSec = standing.gapToLeaderSec !== undefined ? standing.gapToLeaderSec : rankIdx * 2.5;
+          const fullRaceGapFraction = (fullGapSec / lapDuration) % 1.0;
+
+          // Smooth interpolation from grid lineup to natural race gaps
+          const effectiveGapFraction = gridGapFraction * (1.0 - spreadFactor) + fullRaceGapFraction * spreadFactor;
+          let carProg = (leaderProg - effectiveGapFraction + 1.0) % 1.0;
+
+          // Check if driver pitted on this lap (only after lap 1)
+          const pitData = currentLapNum > 1 ? currentLapTimeline?.pitStops?.find(
             (p) =>
               String(p.id).toLowerCase() === String(car.id).toLowerCase() ||
               String(p.code).toLowerCase() === String(car.code).toLowerCase()
-          );
-          const isScheduledToPit = Boolean(pitData) || Boolean(standing.pitted);
+          ) : null;
+          const isScheduledToPit = Boolean(pitData) || (currentLapNum > 1 && Boolean(standing.pitted));
 
           if (isScheduledToPit) {
             // Pit straight zone (0.94 -> 0.06)
@@ -322,7 +342,7 @@ const LiveTrackVisualizer = ({
               car.pitLaneOffset = 0;
               const { speed, isDrs } = calculateSpeedAtProgress(carProg, drsZones, rankIdx > 0 && (standing.intervalToCarAheadSec || 2.0) < 1.0);
               car.speed = speed * (car.paceFactor || 1.0);
-              car.drsOpen = isDrs && flagStatus === 'GREEN';
+              car.drsOpen = isDrs && flagStatus === 'GREEN' && currentLapNum > 1;
             }
           } else {
             car.inPit = false;
@@ -330,7 +350,7 @@ const LiveTrackVisualizer = ({
             car.pitLaneOffset = 0;
             const { speed, isDrs } = calculateSpeedAtProgress(carProg, drsZones, rankIdx > 0 && (standing.intervalToCarAheadSec || 2.0) < 1.0);
             car.speed = speed * (car.paceFactor || 1.0);
-            car.drsOpen = isDrs && flagStatus === 'GREEN';
+            car.drsOpen = isDrs && flagStatus === 'GREEN' && currentLapNum > 1;
           }
 
           car.progress = carProg;
@@ -341,8 +361,8 @@ const LiveTrackVisualizer = ({
           car.tire = standing.tire || car.tire || 'MEDIUM';
           car.tireAge = standing.tireAge || car.tireAge || 1;
           car.pitCount = standing.pitCount || car.pitCount || 0;
-          car.gapToLeaderSec = gapSec;
-          car.intervalToCarAheadSec = standing.intervalToCarAheadSec || (rankIdx === 0 ? 0 : 2.5);
+          car.gapToLeaderSec = fullGapSec * spreadFactor;
+          car.intervalToCarAheadSec = (standing.intervalToCarAheadSec || (rankIdx === 0 ? 0 : 2.5)) * spreadFactor;
 
           updatedState.push(car);
         });
