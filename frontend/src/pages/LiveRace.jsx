@@ -421,6 +421,7 @@ const LiveRace = () => {
                 onSelectDriver={setSelectedDriverId}
                 currentLap={currentLap}
                 totalLaps={totalLaps}
+                lapDurationSec={circuitDetails?.averageLapTimeSec || 88.0}
               />
             </div>
           </div>

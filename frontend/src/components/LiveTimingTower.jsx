@@ -15,16 +15,17 @@ const LiveTimingTower = ({
   onSelectDriver = () => {},
   currentLap = 1,
   totalLaps = 57,
+  lapDurationSec = 88.0,
 }) => {
-  // Sort drivers based on simulated position / progress
+  // Sort drivers based on simulated lap and track progress
   const sortedDrivers = [...drivers].sort((a, b) => {
-    // If different lap, higher lap is ahead
     if ((b.lap || 1) !== (a.lap || 1)) {
       return (b.lap || 1) - (a.lap || 1);
     }
-    // Else higher progress is ahead
     return (b.progress || 0) - (a.progress || 0);
   });
+
+  const leader = sortedDrivers[0];
 
   return (
     <div className="w-full flex flex-col rounded-3xl bg-[#090b10] border border-white/10 overflow-hidden shadow-2xl">
@@ -46,15 +47,28 @@ const LiveTimingTower = ({
         {sortedDrivers.map((driver, index) => {
           const isSelected = selectedDriverId === driver.id;
           const isLeader = index === 0;
-          const tire = (index % 3 === 0 ? 'SOFT' : index % 2 === 0 ? 'MEDIUM' : 'HARD');
-          const tireData = TIRE_COLORS[tire];
+          const tire = driver.tire || (index % 3 === 0 ? 'SOFT' : index % 2 === 0 ? 'MEDIUM' : 'HARD');
+          const tireData = TIRE_COLORS[tire] || TIRE_COLORS.MEDIUM;
 
-          // Compute interval to car ahead
+          // Compute real dynamic time gap based on track progress and authentic lap time
           let intervalDisplay = 'LEADER';
-          if (!isLeader) {
-            const gapSec = (0.35 + (index * 0.42)).toFixed(3);
-            intervalDisplay = `+${gapSec}`;
+          if (!isLeader && leader) {
+            const lapDiff = (leader.lap || 1) - (driver.lap || 1);
+            let progressDiff = (leader.progress || 0) - (driver.progress || 0);
+            if (progressDiff < 0) progressDiff += 1.0;
+            const totalGapSec = (lapDiff * lapDurationSec + progressDiff * lapDurationSec);
+
+            if (lapDiff >= 1) {
+              intervalDisplay = `+${lapDiff} LAP`;
+            } else {
+              intervalDisplay = `+${totalGapSec.toFixed(3)}s`;
+            }
           }
+
+          // Format benchmark lap time
+          const baseMinutes = Math.floor(lapDurationSec / 60);
+          const baseSecs = (lapDurationSec % 60 + (index * 0.18)).toFixed(3);
+          const formattedLapTime = `${baseMinutes}:${baseSecs < 10 ? '0' : ''}${baseSecs}`;
 
           return (
             <motion.div
@@ -124,7 +138,7 @@ const LiveTimingTower = ({
                 </div>
               </div>
 
-              {/* Right: Tires, DRS, Interval */}
+              {/* Right: Tires, DRS, Gap */}
               <div className="flex items-center gap-2.5 shrink-0">
                 {/* DRS Active badge */}
                 {driver.drsOpen && (
@@ -143,12 +157,17 @@ const LiveTimingTower = ({
                 </span>
 
                 {/* Gap / Interval */}
-                <span
-                  className="w-14 text-right text-xs font-mono font-bold tabular-nums"
-                  style={{ color: isLeader ? '#FFD700' : '#CCCCCC' }}
-                >
-                  {intervalDisplay}
-                </span>
+                <div className="w-16 text-right">
+                  <div
+                    className="text-xs font-mono font-bold tabular-nums"
+                    style={{ color: isLeader ? '#FFD700' : '#CCCCCC' }}
+                  >
+                    {intervalDisplay}
+                  </div>
+                  <div className="text-[9px] font-mono text-gray-500 tabular-nums">
+                    {formattedLapTime}
+                  </div>
+                </div>
               </div>
             </motion.div>
           );

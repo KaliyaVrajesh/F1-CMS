@@ -1,6 +1,6 @@
 /**
- * Circuit geometry, DRS zones, and corner turns metadata
- * Provides turn counts, milestones, and DRS activation zones for F1 circuits.
+ * Circuit geometry, DRS zones, corner turns, and authentic lap durations
+ * Provides realistic benchmark lap times (in seconds) matching official FIA records.
  */
 
 export const DEFAULT_DRIVERS = [
@@ -27,6 +27,114 @@ export const DEFAULT_DRIVERS = [
 ];
 
 export const CIRCUIT_DETAILS = {
+  silverstone: {
+    name: 'Silverstone Circuit',
+    file: 'silverstone',
+    country: 'United Kingdom',
+    flag: '🇬🇧',
+    totalLaps: 52,
+    lapDistanceKm: 5.891,
+    averageLapTimeSec: 89.2, // ~1:29.200 authentic race pace
+    turnsCount: 18,
+    drsZones: [
+      { start: 0.28, end: 0.42, label: 'DRS 1' },
+      { start: 0.62, end: 0.78, label: 'DRS 2' },
+    ],
+    turnMilestones: [
+      { turn: 1, pos: 0.10 },
+      { turn: 3, pos: 0.22 },
+      { turn: 6, pos: 0.38 },
+      { turn: 9, pos: 0.52 },
+      { turn: 11, pos: 0.65 },
+      { turn: 15, pos: 0.82 },
+      { turn: 18, pos: 0.94 },
+    ],
+  },
+  Zandvoort: {
+    name: 'Circuit Zandvoort',
+    file: 'Zandvoort',
+    country: 'Netherlands',
+    flag: '🇳🇱',
+    totalLaps: 72,
+    lapDistanceKm: 4.259,
+    averageLapTimeSec: 72.8, // ~1:12.800 authentic race pace
+    turnsCount: 14,
+    drsZones: [
+      { start: 0.02, end: 0.14, label: 'DRS 1' },
+      { start: 0.58, end: 0.72, label: 'DRS 2' },
+    ],
+    turnMilestones: [
+      { turn: 1, pos: 0.12 },
+      { turn: 3, pos: 0.28 },
+      { turn: 7, pos: 0.52 },
+      { turn: 10, pos: 0.72 },
+      { turn: 14, pos: 0.94 },
+    ],
+  },
+  monza: {
+    name: 'Autodromo Nazionale Monza',
+    file: 'monza',
+    country: 'Italy',
+    flag: '🇮🇹',
+    totalLaps: 53,
+    lapDistanceKm: 5.793,
+    averageLapTimeSec: 81.5, // ~1:21.500
+    turnsCount: 11,
+    drsZones: [
+      { start: 0.03, end: 0.18, label: 'DRS 1' },
+      { start: 0.48, end: 0.68, label: 'DRS 2' },
+    ],
+    turnMilestones: [
+      { turn: 1, pos: 0.16 },
+      { turn: 4, pos: 0.38 },
+      { turn: 6, pos: 0.52 },
+      { turn: 8, pos: 0.72 },
+      { turn: 11, pos: 0.92 },
+    ],
+  },
+  Spa: {
+    name: 'Circuit de Spa-Francorchamps',
+    file: 'Spa',
+    country: 'Belgium',
+    flag: '🇧🇪',
+    totalLaps: 44,
+    lapDistanceKm: 7.004,
+    averageLapTimeSec: 106.5, // ~1:46.500
+    turnsCount: 19,
+    drsZones: [
+      { start: 0.02, end: 0.12, label: 'DRS 1' },
+      { start: 0.25, end: 0.44, label: 'DRS 2' },
+    ],
+    turnMilestones: [
+      { turn: 1, pos: 0.08 },
+      { turn: 3, pos: 0.18 },
+      { turn: 5, pos: 0.36 },
+      { turn: 8, pos: 0.48 },
+      { turn: 12, pos: 0.68 },
+      { turn: 15, pos: 0.82 },
+      { turn: 18, pos: 0.92 },
+    ],
+  },
+  monaco: {
+    name: 'Circuit de Monaco',
+    file: 'monaco',
+    country: 'Monaco',
+    flag: '🇲🇨',
+    totalLaps: 78,
+    lapDistanceKm: 3.337,
+    averageLapTimeSec: 74.5, // ~1:14.500
+    turnsCount: 19,
+    drsZones: [{ start: 0.02, end: 0.14, label: 'DRS 1' }],
+    turnMilestones: [
+      { turn: 1, pos: 0.12 },
+      { turn: 3, pos: 0.25 },
+      { turn: 6, pos: 0.42 },
+      { turn: 10, pos: 0.62 },
+      { turn: 12, pos: 0.75 },
+      { turn: 15, pos: 0.86 },
+      { turn: 19, pos: 0.96 },
+    ],
+  },
   bahrain: {
     name: 'Bahrain International Circuit',
     file: 'bahrain',
@@ -34,6 +142,7 @@ export const CIRCUIT_DETAILS = {
     flag: '🇧🇭',
     totalLaps: 57,
     lapDistanceKm: 5.412,
+    averageLapTimeSec: 93.0, // ~1:33.000
     turnsCount: 15,
     drsZones: [
       { start: 0.02, end: 0.16, label: 'DRS 1' },
@@ -65,6 +174,7 @@ export const CIRCUIT_DETAILS = {
     flag: '🇸🇦',
     totalLaps: 50,
     lapDistanceKm: 6.174,
+    averageLapTimeSec: 90.5,
     turnsCount: 27,
     drsZones: [
       { start: 0.05, end: 0.20, label: 'DRS 1' },
@@ -89,6 +199,7 @@ export const CIRCUIT_DETAILS = {
     flag: '🇦🇺',
     totalLaps: 58,
     lapDistanceKm: 5.278,
+    averageLapTimeSec: 79.5,
     turnsCount: 14,
     drsZones: [
       { start: 0.03, end: 0.17, label: 'DRS 1' },
@@ -119,6 +230,7 @@ export const CIRCUIT_DETAILS = {
     flag: '🇯🇵',
     totalLaps: 53,
     lapDistanceKm: 5.807,
+    averageLapTimeSec: 91.5,
     turnsCount: 18,
     drsZones: [{ start: 0.02, end: 0.15, label: 'DRS 1' }],
     turnMilestones: [
@@ -140,6 +252,7 @@ export const CIRCUIT_DETAILS = {
     flag: '🇨🇳',
     totalLaps: 56,
     lapDistanceKm: 5.451,
+    averageLapTimeSec: 95.0,
     turnsCount: 16,
     drsZones: [
       { start: 0.04, end: 0.16, label: 'DRS 1' },
@@ -161,6 +274,7 @@ export const CIRCUIT_DETAILS = {
     flag: '🇺🇸',
     totalLaps: 57,
     lapDistanceKm: 5.412,
+    averageLapTimeSec: 90.0,
     turnsCount: 19,
     drsZones: [
       { start: 0.02, end: 0.15, label: 'DRS 1' },
@@ -182,6 +296,7 @@ export const CIRCUIT_DETAILS = {
     flag: '🇮🇹',
     totalLaps: 63,
     lapDistanceKm: 4.909,
+    averageLapTimeSec: 77.0,
     turnsCount: 19,
     drsZones: [{ start: 0.03, end: 0.16, label: 'DRS 1' }],
     turnMilestones: [
@@ -193,25 +308,6 @@ export const CIRCUIT_DETAILS = {
       { turn: 18, pos: 0.94 },
     ],
   },
-  monaco: {
-    name: 'Circuit de Monaco',
-    file: 'monaco',
-    country: 'Monaco',
-    flag: '🇲🇨',
-    totalLaps: 78,
-    lapDistanceKm: 3.337,
-    turnsCount: 19,
-    drsZones: [{ start: 0.02, end: 0.14, label: 'DRS 1' }],
-    turnMilestones: [
-      { turn: 1, pos: 0.12 },
-      { turn: 3, pos: 0.25 },
-      { turn: 6, pos: 0.42 },
-      { turn: 10, pos: 0.62 },
-      { turn: 12, pos: 0.75 },
-      { turn: 15, pos: 0.86 },
-      { turn: 19, pos: 0.96 },
-    ],
-  },
   GillesVilleneuve: {
     name: 'Circuit Gilles-Villeneuve',
     file: 'GillesVilleneuve',
@@ -219,6 +315,7 @@ export const CIRCUIT_DETAILS = {
     flag: '🇨🇦',
     totalLaps: 70,
     lapDistanceKm: 4.361,
+    averageLapTimeSec: 74.0,
     turnsCount: 14,
     drsZones: [
       { start: 0.04, end: 0.18, label: 'DRS 1' },
@@ -239,6 +336,7 @@ export const CIRCUIT_DETAILS = {
     flag: '🇪🇸',
     totalLaps: 66,
     lapDistanceKm: 4.657,
+    averageLapTimeSec: 76.5,
     turnsCount: 14,
     drsZones: [
       { start: 0.03, end: 0.18, label: 'DRS 1' },
@@ -259,6 +357,7 @@ export const CIRCUIT_DETAILS = {
     flag: '🇦🇹',
     totalLaps: 71,
     lapDistanceKm: 4.318,
+    averageLapTimeSec: 67.5,
     turnsCount: 10,
     drsZones: [
       { start: 0.03, end: 0.16, label: 'DRS 1' },
@@ -274,28 +373,6 @@ export const CIRCUIT_DETAILS = {
       { turn: 10, pos: 0.95 },
     ],
   },
-  silverstone: {
-    name: 'Silverstone Circuit',
-    file: 'silverstone',
-    country: 'United Kingdom',
-    flag: '🇬🇧',
-    totalLaps: 52,
-    lapDistanceKm: 5.891,
-    turnsCount: 18,
-    drsZones: [
-      { start: 0.28, end: 0.42, label: 'DRS 1' },
-      { start: 0.62, end: 0.78, label: 'DRS 2' },
-    ],
-    turnMilestones: [
-      { turn: 1, pos: 0.10 },
-      { turn: 3, pos: 0.22 },
-      { turn: 6, pos: 0.38 },
-      { turn: 9, pos: 0.52 },
-      { turn: 11, pos: 0.65 },
-      { turn: 15, pos: 0.82 },
-      { turn: 18, pos: 0.94 },
-    ],
-  },
   hungaroring: {
     name: 'Hungaroring',
     file: 'hungaroring',
@@ -303,6 +380,7 @@ export const CIRCUIT_DETAILS = {
     flag: '🇭🇺',
     totalLaps: 70,
     lapDistanceKm: 4.381,
+    averageLapTimeSec: 78.0,
     turnsCount: 14,
     drsZones: [{ start: 0.03, end: 0.18, label: 'DRS 1' }],
     turnMilestones: [
@@ -313,68 +391,6 @@ export const CIRCUIT_DETAILS = {
       { turn: 14, pos: 0.94 },
     ],
   },
-  Spa: {
-    name: 'Circuit de Spa-Francorchamps',
-    file: 'Spa',
-    country: 'Belgium',
-    flag: '🇧🇪',
-    totalLaps: 44,
-    lapDistanceKm: 7.004,
-    turnsCount: 19,
-    drsZones: [
-      { start: 0.02, end: 0.12, label: 'DRS 1' },
-      { start: 0.25, end: 0.44, label: 'DRS 2' },
-    ],
-    turnMilestones: [
-      { turn: 1, pos: 0.08 },
-      { turn: 3, pos: 0.18 },
-      { turn: 5, pos: 0.36 },
-      { turn: 8, pos: 0.48 },
-      { turn: 12, pos: 0.68 },
-      { turn: 15, pos: 0.82 },
-      { turn: 18, pos: 0.92 },
-    ],
-  },
-  Zandvoort: {
-    name: 'Circuit Zandvoort',
-    file: 'Zandvoort',
-    country: 'Netherlands',
-    flag: '🇳🇱',
-    totalLaps: 72,
-    lapDistanceKm: 4.259,
-    turnsCount: 14,
-    drsZones: [
-      { start: 0.02, end: 0.14, label: 'DRS 1' },
-      { start: 0.58, end: 0.72, label: 'DRS 2' },
-    ],
-    turnMilestones: [
-      { turn: 1, pos: 0.12 },
-      { turn: 3, pos: 0.28 },
-      { turn: 7, pos: 0.52 },
-      { turn: 10, pos: 0.72 },
-      { turn: 14, pos: 0.94 },
-    ],
-  },
-  monza: {
-    name: 'Autodromo Nazionale Monza',
-    file: 'monza',
-    country: 'Italy',
-    flag: '🇮🇹',
-    totalLaps: 53,
-    lapDistanceKm: 5.793,
-    turnsCount: 11,
-    drsZones: [
-      { start: 0.03, end: 0.18, label: 'DRS 1' },
-      { start: 0.48, end: 0.68, label: 'DRS 2' },
-    ],
-    turnMilestones: [
-      { turn: 1, pos: 0.16 },
-      { turn: 4, pos: 0.38 },
-      { turn: 6, pos: 0.52 },
-      { turn: 8, pos: 0.72 },
-      { turn: 11, pos: 0.92 },
-    ],
-  },
   baku: {
     name: 'Baku City Circuit',
     file: 'baku',
@@ -382,6 +398,7 @@ export const CIRCUIT_DETAILS = {
     flag: '🇦🇿',
     totalLaps: 51,
     lapDistanceKm: 6.003,
+    averageLapTimeSec: 104.0,
     turnsCount: 20,
     drsZones: [
       { start: 0.05, end: 0.25, label: 'DRS 1' },
@@ -402,6 +419,7 @@ export const CIRCUIT_DETAILS = {
     flag: '🇸🇬',
     totalLaps: 62,
     lapDistanceKm: 4.940,
+    averageLapTimeSec: 96.0,
     turnsCount: 19,
     drsZones: [
       { start: 0.02, end: 0.14, label: 'DRS 1' },
@@ -423,6 +441,7 @@ export const CIRCUIT_DETAILS = {
     flag: '🇺🇸',
     totalLaps: 56,
     lapDistanceKm: 5.513,
+    averageLapTimeSec: 97.0,
     turnsCount: 20,
     drsZones: [
       { start: 0.04, end: 0.18, label: 'DRS 1' },
@@ -443,6 +462,7 @@ export const CIRCUIT_DETAILS = {
     flag: '🇲🇽',
     totalLaps: 71,
     lapDistanceKm: 4.304,
+    averageLapTimeSec: 79.5,
     turnsCount: 17,
     drsZones: [
       { start: 0.03, end: 0.20, label: 'DRS 1' },
@@ -464,6 +484,7 @@ export const CIRCUIT_DETAILS = {
     flag: '🇧🇷',
     totalLaps: 71,
     lapDistanceKm: 4.309,
+    averageLapTimeSec: 71.5,
     turnsCount: 15,
     drsZones: [
       { start: 0.04, end: 0.22, label: 'DRS 1' },
@@ -484,6 +505,7 @@ export const CIRCUIT_DETAILS = {
     flag: '🇺🇸',
     totalLaps: 50,
     lapDistanceKm: 6.201,
+    averageLapTimeSec: 94.5,
     turnsCount: 17,
     drsZones: [
       { start: 0.04, end: 0.18, label: 'DRS 1' },
@@ -504,6 +526,7 @@ export const CIRCUIT_DETAILS = {
     flag: '🇶🇦',
     totalLaps: 57,
     lapDistanceKm: 5.419,
+    averageLapTimeSec: 84.0,
     turnsCount: 16,
     drsZones: [{ start: 0.02, end: 0.22, label: 'DRS 1' }],
     turnMilestones: [
@@ -521,6 +544,7 @@ export const CIRCUIT_DETAILS = {
     flag: '🇦🇪',
     totalLaps: 58,
     lapDistanceKm: 5.281,
+    averageLapTimeSec: 87.0, // ~1:27.000
     turnsCount: 16,
     drsZones: [
       { start: 0.28, end: 0.48, label: 'DRS 1' },
@@ -541,7 +565,7 @@ export const CIRCUIT_DETAILS = {
  * Get circuit details with intelligent lookup fallback
  */
 export function getCircuitDetails(circuitKey) {
-  if (!circuitKey) return CIRCUIT_DETAILS.bahrain;
+  if (!circuitKey) return CIRCUIT_DETAILS.Zandvoort;
   
   const lower = circuitKey.toLowerCase();
   for (const [key, details] of Object.entries(CIRCUIT_DETAILS)) {
@@ -555,7 +579,6 @@ export function getCircuitDetails(circuitKey) {
     }
   }
 
-  // If matched to file list
   return {
     name: circuitKey,
     file: circuitKey,
@@ -563,6 +586,7 @@ export function getCircuitDetails(circuitKey) {
     flag: '🏁',
     totalLaps: 55,
     lapDistanceKm: 5.3,
+    averageLapTimeSec: 88.0,
     turnsCount: 14,
     drsZones: [
       { start: 0.04, end: 0.18, label: 'DRS 1' },

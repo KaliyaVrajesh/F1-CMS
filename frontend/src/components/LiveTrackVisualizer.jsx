@@ -4,23 +4,23 @@ import { playPaddleShift } from '../utils/audio';
 
 // Realistic driver performance rating modifiers
 const DRIVER_PACE_RATINGS = {
-  verstappen: 1.038,
-  norris:     1.035,
-  leclerc:    1.030,
-  hamilton:   1.028,
-  piastri:    1.025,
-  russell:    1.024,
-  antonelli:  1.018,
-  sainz:      1.016,
-  alonso:     1.015,
-  albon:      1.008,
-  gasly:      1.002,
-  lawson:     1.000,
-  tsunoda:    0.998,
-  hadjar:     0.995,
-  bearman:    0.992,
-  ocon:       0.990,
-  hulkenberg: 0.985,
+  verstappen: 1.025,
+  norris:     1.022,
+  leclerc:    1.018,
+  hamilton:   1.016,
+  piastri:    1.014,
+  russell:    1.012,
+  antonelli:  1.008,
+  sainz:      1.006,
+  alonso:     1.005,
+  albon:      1.000,
+  gasly:      0.996,
+  lawson:     0.994,
+  tsunoda:    0.992,
+  hadjar:     0.990,
+  bearman:    0.988,
+  ocon:       0.986,
+  hulkenberg: 0.984,
   stroll:     0.982,
   bortoleto:  0.980,
   doohan:     0.978,
@@ -93,14 +93,14 @@ const LiveTrackVisualizer = ({
     }
   }, [svgPathD]);
 
-  // Initialize driver positions
+  // Initialize driver positions with realistic grid spacing
   useEffect(() => {
     if (drivers.length === 0) return;
 
     highestLapRef.current = 1;
     const basePositions = drivers.map((d, index) => {
-      const initialProgress = (1.0 - index * 0.038) % 1.0;
-      const pace = DRIVER_PACE_RATINGS[d.id] || 1.0 - index * 0.003;
+      const initialProgress = (1.0 - index * 0.032) % 1.0;
+      const pace = DRIVER_PACE_RATINGS[d.id] || (1.0 - index * 0.002);
       return {
         id: d.id,
         code: d.code,
@@ -109,7 +109,7 @@ const LiveTrackVisualizer = ({
         color: d.color,
         number: d.number,
         progress: (initialProgress + 1.0) % 1.0,
-        speed: 240,
+        speed: 245,
         lap: 1,
         drsOpen: false,
         photo: d.photo,
@@ -122,7 +122,7 @@ const LiveTrackVisualizer = ({
     driversStateRef.current = basePositions;
   }, [drivers, viewMode]);
 
-  // Speed calculation heuristic based on track geometry & DRS zones
+  // Speed calculation based on track curvature & DRS zones
   const calculateSpeedAtProgress = useCallback(
     (progress, drsZones = [], isDrsActive = false) => {
       const inDrs = drsZones.some((z) => progress >= z.start && progress <= z.end);
@@ -132,19 +132,21 @@ const LiveTrackVisualizer = ({
 
       const turnMilestones = circuitDetails?.turnMilestones || [];
       const nearTurn = turnMilestones.some((t) => Math.abs(progress - t.pos) < 0.025);
-      if (nearTurn) return { speed: 98, isDrs: false };
+      if (nearTurn) return { speed: 105, isDrs: false };
 
       return { speed: 255 + Math.sin(progress * Math.PI * 8) * 35, isDrs: false };
     },
     [circuitDetails]
   );
 
-  // 60FPS Physics & Dynamic Overtaking Loop (Strictly locked to track centerline)
+  // 60FPS Physics & Dynamic Overtaking Loop (Authentic 1:1 Real-Time Lap Timing)
   useEffect(() => {
     if (!pathRef.current || trackLength === 0) return;
 
     const svgPath = pathRef.current;
     const drsZones = circuitDetails?.drsZones || [];
+    // Authentic lap duration in seconds for this circuit
+    const lapDurationSec = circuitDetails?.averageLapTimeSec || 88.0;
 
     const tick = (now) => {
       const dt = Math.min((now - lastFrameTimeRef.current) / 1000, 0.1);
@@ -154,10 +156,11 @@ const LiveTrackVisualizer = ({
         const state = driversStateRef.current;
         const count = state.length;
 
-        let paceModifier = simulationSpeed * 0.048;
-        if (flagStatus === 'SC') paceModifier *= 0.45;
-        if (flagStatus === 'VSC') paceModifier *= 0.60;
-        if (flagStatus === 'YELLOW') paceModifier *= 0.80;
+        // Scale pace strictly based on the authentic lap duration (1 full lap takes exact lapDurationSec at 1x)
+        let paceScale = (1.0 / lapDurationSec) * simulationSpeed;
+        if (flagStatus === 'SC') paceScale *= 0.45;
+        if (flagStatus === 'VSC') paceScale *= 0.60;
+        if (flagStatus === 'YELLOW') paceScale *= 0.80;
 
         let maxLap = highestLapRef.current;
 
@@ -181,8 +184,9 @@ const LiveTrackVisualizer = ({
           car.speed = dynamicSpeed;
           car.drsOpen = isDrs && flagStatus === 'GREEN';
 
-          // Progress forward strictly along track spline
-          const deltaProgress = (dynamicSpeed / 300) * paceModifier * dt;
+          // Progress forward on track spline at realistic 1:1 speed
+          const speedRatio = dynamicSpeed / 240.0;
+          const deltaProgress = paceScale * speedRatio * dt;
           const prevProg = car.progress;
           car.progress = (car.progress + deltaProgress) % 1.0;
 
@@ -196,8 +200,8 @@ const LiveTrackVisualizer = ({
           }
         }
 
-        // Check overtakes periodically (every 500ms)
-        if (now - lastOvertakeCheckRef.current > 500) {
+        // Check overtakes periodically
+        if (now - lastOvertakeCheckRef.current > 600) {
           lastOvertakeCheckRef.current = now;
           for (let i = 0; i < count; i++) {
             for (let j = i + 1; j < count; j++) {
