@@ -4,15 +4,15 @@ import { playPaddleShift } from '../utils/audio';
 
 // Realistic driver performance rating modifiers
 const DRIVER_PACE_RATINGS = {
-  verstappen: 1.025,
-  norris:     1.022,
-  leclerc:    1.018,
-  hamilton:   1.016,
-  piastri:    1.014,
-  russell:    1.012,
-  antonelli:  1.008,
-  sainz:      1.006,
-  alonso:     1.005,
+  verstappen: 1.028,
+  norris:     1.025,
+  leclerc:    1.020,
+  hamilton:   1.018,
+  piastri:    1.016,
+  russell:    1.014,
+  antonelli:  1.010,
+  sainz:      1.008,
+  alonso:     1.006,
   albon:      1.000,
   gasly:      0.996,
   lawson:     0.994,
@@ -34,9 +34,10 @@ const LiveTrackVisualizer = ({
   isPlaying = true,
   simulationSpeed = 1.0,
   flagStatus = 'GREEN', // GREEN | YELLOW | SC | VSC | RED
-  viewMode = 'LIVE_BROADCAST', // LIVE_BROADCAST | GP_REPLAY
+  viewMode = 'LIVE_TRACK', // LIVE_TRACK | GP_REPLAY
   onOvertake = () => {},
   onLapChange = () => {},
+  onPositionsUpdate = () => {},
 }) => {
   const containerRef = useRef(null);
   const pathRef = useRef(null);
@@ -52,6 +53,7 @@ const LiveTrackVisualizer = ({
   const lastFrameTimeRef = useRef(performance.now());
   const animFrameIdRef = useRef(null);
   const lastOvertakeCheckRef = useRef(0);
+  const lastTimingSyncRef = useRef(0);
   const highestLapRef = useRef(1);
 
   // Load Circuit SVG file
@@ -93,14 +95,15 @@ const LiveTrackVisualizer = ({
     }
   }, [svgPathD]);
 
-  // Initialize driver positions with realistic grid spacing
+  // Initialize driver positions - TIGHTLY BUNCHED AT START LINE
   useEffect(() => {
     if (drivers.length === 0) return;
 
     highestLapRef.current = 1;
     const basePositions = drivers.map((d, index) => {
-      const initialProgress = (1.0 - index * 0.032) % 1.0;
-      const pace = DRIVER_PACE_RATINGS[d.id] || (1.0 - index * 0.002);
+      // Grid start spacing: Tight 8-meter staggered pack right behind start line
+      const initialProgress = (0.998 - index * 0.0018 + 1.0) % 1.0;
+      const pace = DRIVER_PACE_RATINGS[d.id] || 1.0 - index * 0.002;
       return {
         id: d.id,
         code: d.code,
@@ -108,7 +111,7 @@ const LiveTrackVisualizer = ({
         team: d.team,
         color: d.color,
         number: d.number,
-        progress: (initialProgress + 1.0) % 1.0,
+        progress: initialProgress,
         speed: 245,
         lap: 1,
         drsOpen: false,
@@ -120,6 +123,7 @@ const LiveTrackVisualizer = ({
     });
 
     driversStateRef.current = basePositions;
+    onPositionsUpdate(basePositions);
   }, [drivers, viewMode]);
 
   // Speed calculation based on track curvature & DRS zones
@@ -139,13 +143,12 @@ const LiveTrackVisualizer = ({
     [circuitDetails]
   );
 
-  // 60FPS Physics & Dynamic Overtaking Loop (Authentic 1:1 Real-Time Lap Timing)
+  // 60FPS Physics & Real-Time Sync Loop
   useEffect(() => {
     if (!pathRef.current || trackLength === 0) return;
 
     const svgPath = pathRef.current;
     const drsZones = circuitDetails?.drsZones || [];
-    // Authentic lap duration in seconds for this circuit
     const lapDurationSec = circuitDetails?.averageLapTimeSec || 88.0;
 
     const tick = (now) => {
@@ -156,7 +159,6 @@ const LiveTrackVisualizer = ({
         const state = driversStateRef.current;
         const count = state.length;
 
-        // Scale pace strictly based on the authentic lap duration (1 full lap takes exact lapDurationSec at 1x)
         let paceScale = (1.0 / lapDurationSec) * simulationSpeed;
         if (flagStatus === 'SC') paceScale *= 0.45;
         if (flagStatus === 'VSC') paceScale *= 0.60;
@@ -172,7 +174,7 @@ const LiveTrackVisualizer = ({
           for (let j = 0; j < count; j++) {
             if (i !== j) {
               const diff = (state[j].progress - car.progress + 1.0) % 1.0;
-              if (diff > 0.005 && diff < 0.032) {
+              if (diff > 0.003 && diff < 0.025) {
                 hasDrsBoost = true;
                 break;
               }
@@ -184,7 +186,7 @@ const LiveTrackVisualizer = ({
           car.speed = dynamicSpeed;
           car.drsOpen = isDrs && flagStatus === 'GREEN';
 
-          // Progress forward on track spline at realistic 1:1 speed
+          // Progress forward strictly along track spline
           const speedRatio = dynamicSpeed / 240.0;
           const deltaProgress = paceScale * speedRatio * dt;
           const prevProg = car.progress;
@@ -198,6 +200,12 @@ const LiveTrackVisualizer = ({
               onLapChange(maxLap);
             }
           }
+        }
+
+        // Sync positions back to Timing Tower every 100ms
+        if (now - lastTimingSyncRef.current > 100) {
+          lastTimingSyncRef.current = now;
+          onPositionsUpdate([...state]);
         }
 
         // Check overtakes periodically
@@ -243,7 +251,7 @@ const LiveTrackVisualizer = ({
     return () => {
       if (animFrameIdRef.current) cancelAnimationFrame(animFrameIdRef.current);
     };
-  }, [trackLength, isPlaying, simulationSpeed, flagStatus, calculateSpeedAtProgress, circuitDetails, viewMode, onOvertake, onLapChange]);
+  }, [trackLength, isPlaying, simulationSpeed, flagStatus, calculateSpeedAtProgress, circuitDetails, viewMode, onOvertake, onLapChange, onPositionsUpdate]);
 
   // Compute Turn corner (x, y) coordinates for pill badges
   const turnMarkers = useMemo(() => {
@@ -473,7 +481,7 @@ const LiveTrackVisualizer = ({
             </g>
           ))}
 
-          {/* Driver Position Dots on Track (Strictly locked to centerline) */}
+          {/* Driver Position Dots on Track */}
           {driverRenderPositions.map((car) => {
             const isSelected = selectedDriverId === car.id;
             const isHovered = hoveredDriver?.id === car.id;
@@ -580,7 +588,9 @@ const LiveTrackVisualizer = ({
               </div>
 
               <div className="flex items-center gap-3 text-xs font-mono text-gray-400 mt-0.5">
-                <span style={{ color: hoveredDriver.color }}>{hoveredDriver.team}</span>
+                <span style={{ color: hoveredDriver.color }}>
+                  {typeof hoveredDriver.team === 'string' ? hoveredDriver.team : 'F1 Team'}
+                </span>
                 <span>·</span>
                 <span className="text-white font-bold">{Math.round(hoveredDriver.speed)} KM/H</span>
                 {hoveredDriver.drsOpen && (

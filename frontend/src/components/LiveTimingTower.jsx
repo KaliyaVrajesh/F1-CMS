@@ -1,5 +1,6 @@
 import { motion } from 'framer-motion';
 import { playPaddleShift } from '../utils/audio';
+import { getTeamName } from '../utils/teamColors';
 
 const TIRE_COLORS = {
   SOFT:   { bg: '#E10600', text: '#FFFFFF', label: 'S' },
@@ -49,6 +50,7 @@ const LiveTimingTower = ({
           const isLeader = index === 0;
           const tire = driver.tire || (index % 3 === 0 ? 'SOFT' : index % 2 === 0 ? 'MEDIUM' : 'HARD');
           const tireData = TIRE_COLORS[tire] || TIRE_COLORS.MEDIUM;
+          const teamDisplayName = getTeamName(driver.team, driver) || (typeof driver.team === 'string' ? driver.team : 'F1 Team');
 
           // Compute real dynamic time gap based on track progress and authentic lap time
           let intervalDisplay = 'LEADER';
@@ -56,18 +58,20 @@ const LiveTimingTower = ({
             const lapDiff = (leader.lap || 1) - (driver.lap || 1);
             let progressDiff = (leader.progress || 0) - (driver.progress || 0);
             if (progressDiff < 0) progressDiff += 1.0;
-            const totalGapSec = (lapDiff * lapDurationSec + progressDiff * lapDurationSec);
+            const totalGapSec = lapDiff * lapDurationSec + progressDiff * lapDurationSec;
 
             if (lapDiff >= 1) {
               intervalDisplay = `+${lapDiff} LAP`;
-            } else {
+            } else if (totalGapSec > 0.05) {
               intervalDisplay = `+${totalGapSec.toFixed(3)}s`;
+            } else {
+              intervalDisplay = `+${(0.05 + index * 0.12).toFixed(3)}s`;
             }
           }
 
           // Format benchmark lap time
           const baseMinutes = Math.floor(lapDurationSec / 60);
-          const baseSecs = (lapDurationSec % 60 + (index * 0.18)).toFixed(3);
+          const baseSecs = (lapDurationSec % 60 + index * 0.18).toFixed(3);
           const formattedLapTime = `${baseMinutes}:${baseSecs < 10 ? '0' : ''}${baseSecs}`;
 
           return (
@@ -133,7 +137,7 @@ const LiveTimingTower = ({
                     className="text-[9px] font-mono uppercase truncate font-bold"
                     style={{ color: driver.color }}
                   >
-                    {driver.team}
+                    {teamDisplayName}
                   </div>
                 </div>
               </div>

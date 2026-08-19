@@ -68,6 +68,7 @@ const LiveRace = () => {
   });
 
   const [drivers, setDrivers] = useState(DEFAULT_DRIVERS);
+  const [liveDrivers, setLiveDrivers] = useState(DEFAULT_DRIVERS);
   const [selectedDriverId, setSelectedDriverId] = useState(null);
   const [isPlaying, setIsPlaying] = useState(true);
   const [simulationSpeed, setSimulationSpeed] = useState(1.0);
@@ -385,6 +386,7 @@ const LiveRace = () => {
                 viewMode={activeMode}
                 onOvertake={handleOvertake}
                 onLapChange={(newLap) => setCurrentLap(newLap)}
+                onPositionsUpdate={setLiveDrivers}
               />
 
               {/* Live Race Event Feed */}
@@ -416,7 +418,7 @@ const LiveRace = () => {
             {/* Right Column: Live Timing Tower (4 cols) */}
             <div className="lg:col-span-4">
               <LiveTimingTower
-                drivers={drivers}
+                drivers={liveDrivers.length > 0 ? liveDrivers : drivers}
                 selectedDriverId={selectedDriverId}
                 onSelectDriver={setSelectedDriverId}
                 currentLap={currentLap}
