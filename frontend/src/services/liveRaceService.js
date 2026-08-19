@@ -185,7 +185,21 @@ export async function loadHistoricalGPReplay(year = 2024, round = 1) {
           tState.tireAge += 1;
         }
 
-        const pitDuration = pitDetail?.duration ? parseFloat(pitDetail.duration).toFixed(1) + 's' : '2.4s';
+        let pitDuration = '2.4s';
+        if (hasPit && pitDetail?.duration) {
+          const rawDuration = parseFloat(pitDetail.duration);
+          if (!isNaN(rawDuration) && rawDuration > 15) {
+            // Ergast pit duration is total pit lane transit (~26.5s transit + stationary stop time)
+            pitDuration = Math.max(1.9, Math.min(12.5, rawDuration - 26.5)).toFixed(1) + 's';
+          } else if (!isNaN(rawDuration) && rawDuration > 0) {
+            pitDuration = rawDuration.toFixed(1) + 's';
+          } else {
+            pitDuration = (2.1 + (driver.name.length % 4) * 0.5).toFixed(1) + 's';
+          }
+        } else if (hasPit) {
+          pitDuration = (2.1 + (driver.name.length % 4) * 0.5).toFixed(1) + 's';
+        }
+
         const pitStopNum = pitDetail?.stop ? parseInt(pitDetail.stop, 10) : tState.pitCount;
 
         return {

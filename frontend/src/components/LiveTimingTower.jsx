@@ -21,15 +21,20 @@ const LiveTimingTower = ({
 }) => {
   const [timingMode, setTimingMode] = useState('INTERVAL'); // 'INTERVAL' | 'GAP_LEADER'
 
-  // Sort drivers based on simulated lap and track progress
+  // Sort drivers strictly by their official rank (active drivers P1..PN, then retired drivers)
   const sortedDrivers = [...drivers].sort((a, b) => {
+    if (a.isRetired && !b.isRetired) return 1;
+    if (!a.isRetired && b.isRetired) return -1;
+    if (a.rank !== undefined && b.rank !== undefined) {
+      return a.rank - b.rank;
+    }
     if ((b.lap || 1) !== (a.lap || 1)) {
       return (b.lap || 1) - (a.lap || 1);
     }
     return (b.progress || 0) - (a.progress || 0);
   });
 
-  const leader = sortedDrivers[0];
+  const leader = sortedDrivers.find((d) => !d.isRetired) || sortedDrivers[0];
 
   return (
     <div className="w-full flex flex-col rounded-3xl bg-[#090b10] border border-white/10 overflow-hidden shadow-2xl">
@@ -78,25 +83,20 @@ const LiveTimingTower = ({
             // Compute interval to car ahead and gap to leader
             let gapDisplay = 'LEADER';
             if (driver.inPit || driver.pitState === 'IN_BOX') {
-              gapDisplay = driver.pitState === 'IN_BOX' ? '🔧 BOX 2.4s' : '🔧 IN PIT';
+              gapDisplay = driver.pitState === 'IN_BOX' ? `🔧 BOX ${driver.pitDuration || '2.4s'}` : '🔧 IN PIT';
             } else if (!isLeader && leader) {
-              const lapDiff = (leader.lap || 1) - (driver.lap || 1);
-              let progressDiff = (leader.progress || 0) - (driver.progress || 0);
-              if (progressDiff < 0) progressDiff += 1.0;
-              const totalGapSec = lapDiff * lapDurationSec + progressDiff * lapDurationSec;
-
               if (timingMode === 'INTERVAL') {
                 const intervalVal =
                   driver.intervalToCarAheadSec !== undefined
                     ? driver.intervalToCarAheadSec
-                    : Math.max(0.2, totalGapSec / (index || 1));
+                    : Math.max(0.2, 0.5 + index * 0.35);
                 gapDisplay = `+${intervalVal.toFixed(3)}`;
               } else {
-                if (lapDiff >= 1) {
-                  gapDisplay = `+${lapDiff} LAP`;
-                } else {
-                  gapDisplay = `+${totalGapSec.toFixed(3)}`;
-                }
+                const gapToLeader =
+                  driver.gapToLeaderSec !== undefined
+                    ? driver.gapToLeaderSec
+                    : Math.max(0.5, index * 2.5);
+                gapDisplay = `+${gapToLeader.toFixed(3)}`;
               }
             }
 
