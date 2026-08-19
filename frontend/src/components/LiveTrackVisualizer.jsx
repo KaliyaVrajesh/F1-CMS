@@ -10,6 +10,8 @@ const LiveTrackVisualizer = ({
   isPlaying = true,
   simulationSpeed = 1.0,
   flagStatus = 'GREEN', // GREEN | YELLOW | SC | VSC | RED
+  viewMode = 'LIVE_BROADCAST', // LIVE_BROADCAST | PRE_GRID | GP_REPLAY
+  replayLapData = null,
   onOvertake = () => {},
 }) => {
   const containerRef = useRef(null);
@@ -44,7 +46,6 @@ const LiveTrackVisualizer = ({
         const pathMatches = [...svgText.matchAll(/\sd="([^"]+)"/g)];
         const paths = pathMatches.map((m) => m[1]).filter((d) => d.length > 40);
         if (paths.length > 0) {
-          // Use the longest closed track path
           const mainPath = paths.reduce((a, b) => (a.length > b.length ? a : b));
           setSvgPathD(mainPath);
         }
@@ -66,13 +67,38 @@ const LiveTrackVisualizer = ({
     }
   }, [svgPathD]);
 
-  // Initialize driver positions spaced along the track
+  // Initialize driver positions based on current view mode
   useEffect(() => {
     if (drivers.length === 0) return;
 
+    if (viewMode === 'PRE_GRID') {
+      // Station cars on staggered grid boxes behind start line
+      const gridPositions = drivers.map((d, index) => {
+        // Grid spacing behind start line (progress: 0.94 to 0.99)
+        const gridProgress = 0.985 - index * 0.016;
+        const sideOffset = index % 2 === 0 ? -7 : 7; // Staggered left/right grid slots
+        return {
+          id: d.id,
+          code: d.code,
+          name: d.name,
+          team: d.team,
+          color: d.color,
+          number: d.number,
+          progress: (gridProgress + 1.0) % 1.0,
+          speed: 0,
+          lap: 0,
+          lateralOffset: sideOffset,
+          drsOpen: false,
+          photo: d.photo,
+        };
+      });
+      driversStateRef.current = gridPositions;
+      return;
+    }
+
+    // Live Broadcast / Replay dynamic positioning
     const basePositions = drivers.map((d, index) => {
-      // Space cars on track based on grid / standings position
-      const initialProgress = (1.0 - (index * 0.042)) % 1.0;
+      const initialProgress = (1.0 - index * 0.042) % 1.0;
       return {
         id: d.id,
         code: d.code,
@@ -81,31 +107,28 @@ const LiveTrackVisualizer = ({
         color: d.color,
         number: d.number,
         progress: (initialProgress + 1.0) % 1.0,
-        speed: 240 + Math.sin(index) * 20, // Initial speed in km/h
+        speed: 240 + Math.sin(index) * 20,
         lap: 1,
         lateralOffset: 0,
         drsOpen: false,
-        gapToAhead: index === 0 ? 0 : 0.4 + index * 0.35,
+        photo: d.photo,
       };
     });
 
     driversStateRef.current = basePositions;
-  }, [drivers]);
+  }, [drivers, viewMode]);
 
-  // Calculate speed factor based on track curvature / DRS zones
+  // Speed calculation heuristic based on track geometry & DRS zones
   const calculateSpeedAtProgress = useCallback(
     (progress, drsZones = []) => {
-      // Check if in DRS straight
       const inDrs = drsZones.some((z) => progress >= z.start && progress <= z.end);
-      if (inDrs) return { speed: 325, isDrs: true };
+      if (inDrs) return { speed: 328, isDrs: true };
 
-      // Turns vs Straights heuristic
       const turnMilestones = circuitDetails?.turnMilestones || [];
       const nearTurn = turnMilestones.some((t) => Math.abs(progress - t.pos) < 0.025);
-      if (nearTurn) return { speed: 110, isDrs: false };
+      if (nearTurn) return { speed: 105, isDrs: false };
 
-      // General mid-speed / accelerating
-      return { speed: 255 + Math.sin(progress * Math.PI * 8) * 35, isDrs: false };
+      return { speed: 250 + Math.sin(progress * Math.PI * 8) * 35, isDrs: false };
     },
     [circuitDetails]
   );
@@ -121,11 +144,10 @@ const LiveTrackVisualizer = ({
       const dt = Math.min((now - lastFrameTimeRef.current) / 1000, 0.1);
       lastFrameTimeRef.current = now;
 
-      if (isPlaying && flagStatus !== 'RED') {
+      if (isPlaying && flagStatus !== 'RED' && viewMode !== 'PRE_GRID') {
         const state = driversStateRef.current;
         const count = state.length;
 
-        // Base speed scale (Safety car / VSC slows down field)
         let paceModifier = simulationSpeed * 0.045;
         if (flagStatus === 'SC') paceModifier *= 0.45;
         if (flagStatus === 'VSC') paceModifier *= 0.60;
@@ -137,7 +159,6 @@ const LiveTrackVisualizer = ({
           car.speed = speed;
           car.drsOpen = isDrs && flagStatus === 'GREEN';
 
-          // Move along spline
           const deltaProgress = (speed / 300) * paceModifier * dt;
           const prevProg = car.progress;
           car.progress = (car.progress + deltaProgress) % 1.0;
@@ -147,14 +168,14 @@ const LiveTrackVisualizer = ({
           }
         }
 
-        // Lateral collision avoidance for close cars (e.g. wheel-to-wheel battles)
+        // Dynamic lateral lane positioning for wheel-to-wheel battles
         for (let i = 0; i < count; i++) {
           let overlapCount = 0;
           for (let j = 0; j < count; j++) {
             if (i !== j) {
               const dist = Math.abs(state[i].progress - state[j].progress);
               if (dist < 0.018 || dist > 0.982) {
-                overlapCount += (i > j ? 1 : -1);
+                overlapCount += i > j ? 1 : -1;
               }
             }
           }
@@ -174,7 +195,6 @@ const LiveTrackVisualizer = ({
         const dy = ptAhead.y - pt.y;
         const angle = Math.atan2(dy, dx);
 
-        // Perpendicular offset (-dy, dx)
         const perpX = -Math.sin(angle) * (car.lateralOffset || 0);
         const perpY = Math.cos(angle) * (car.lateralOffset || 0);
 
@@ -194,7 +214,7 @@ const LiveTrackVisualizer = ({
     return () => {
       if (animFrameIdRef.current) cancelAnimationFrame(animFrameIdRef.current);
     };
-  }, [trackLength, isPlaying, simulationSpeed, flagStatus, calculateSpeedAtProgress, circuitDetails]);
+  }, [trackLength, isPlaying, simulationSpeed, flagStatus, calculateSpeedAtProgress, circuitDetails, viewMode]);
 
   // Compute Turn corner (x, y) coordinates for pill badges
   const turnMarkers = useMemo(() => {
@@ -205,7 +225,6 @@ const LiveTrackVisualizer = ({
       const dist = m.pos * trackLength;
       const pt = svgPath.getPointAtLength(dist);
 
-      // Normal offset outwards
       const aheadDist = (dist + 3) % trackLength;
       const ptAhead = svgPath.getPointAtLength(aheadDist);
       const dx = ptAhead.x - pt.x;
@@ -268,8 +287,16 @@ const LiveTrackVisualizer = ({
         </button>
       </div>
 
+      {/* Pre-Grid Formation Overlay Banner */}
+      {viewMode === 'PRE_GRID' && (
+        <div className="absolute top-4 left-4 z-30 px-4 py-2 rounded-xl bg-amber-500/20 border border-amber-500/40 text-amber-400 font-mono font-black text-xs uppercase tracking-widest backdrop-blur-md shadow-lg flex items-center gap-2">
+          <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-ping" />
+          <span>30-MIN PRE-GRID FORMATION · PIT LANE OPEN</span>
+        </div>
+      )}
+
       {/* Flag Status Banner Alert */}
-      {flagStatus !== 'GREEN' && (
+      {flagStatus !== 'GREEN' && viewMode !== 'PRE_GRID' && (
         <div
           className="absolute top-4 left-4 z-30 px-4 py-1.5 rounded-xl font-mono font-black text-xs uppercase tracking-widest flex items-center gap-2 backdrop-blur-md shadow-lg border"
           style={{
