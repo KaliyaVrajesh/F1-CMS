@@ -35,9 +35,9 @@ const LiveTrackVisualizer = ({
   simulationSpeed = 1.0,
   flagStatus = 'GREEN', // GREEN | YELLOW | SC | VSC | RED
   viewMode = 'LIVE_TRACK', // LIVE_TRACK | GP_REPLAY
-  currentLap = 1,
+  replayTimeSec = 0,
+  lapDurationSec = 88.0,
   onOvertake = () => {},
-  onLapChange = () => {},
   onPositionsUpdate = () => {},
 }) => {
   const containerRef = useRef(null);
@@ -54,18 +54,7 @@ const LiveTrackVisualizer = ({
   const lastFrameTimeRef = useRef(performance.now());
   const animFrameIdRef = useRef(null);
   const lastTimingSyncRef = useRef(0);
-  const highestLapRef = useRef(currentLap || 1);
   const previousRankOrderRef = useRef([]);
-
-  // Sync when currentLap prop changes from scrubber
-  useEffect(() => {
-    highestLapRef.current = currentLap;
-    if (driversStateRef.current && driversStateRef.current.length > 0) {
-      driversStateRef.current.forEach((car) => {
-        car.lap = currentLap;
-      });
-    }
-  }, [currentLap]);
 
   // Load Circuit SVG file
   useEffect(() => {
@@ -106,15 +95,14 @@ const LiveTrackVisualizer = ({
     }
   }, [svgPathD]);
 
-  // Initialize driver positions - handles both initial grid start and lap scrubber updates
+  // Initialize / Sync driver positions
   useEffect(() => {
     if (drivers.length === 0) return;
 
-    highestLapRef.current = currentLap;
     const basePositions = drivers.map((d, index) => {
-      let initialProgress = d.progress;
-      if (initialProgress === undefined || initialProgress === null) {
-        initialProgress = (0.998 - index * 0.0018 + 1.0) % 1.0;
+      let prog = d.progress;
+      if (prog === undefined || prog === null) {
+        prog = (0.998 - index * 0.0018 + 1.0) % 1.0;
       }
 
       const pace = DRIVER_PACE_RATINGS[d.id] || 1.0 - index * 0.002;
@@ -125,10 +113,10 @@ const LiveTrackVisualizer = ({
         team: d.team,
         color: d.color,
         number: d.number,
-        progress: initialProgress,
-        speed: 245,
-        lap: d.lap || currentLap || 1,
-        drsOpen: false,
+        progress: prog,
+        speed: d.speed || 245,
+        lap: d.lap || 1,
+        drsOpen: d.drsOpen || false,
         photo: d.photo,
         tire: d.tire || (index % 3 === 0 ? 'SOFT' : index % 2 === 0 ? 'MEDIUM' : 'HARD'),
         paceFactor: pace,
@@ -137,8 +125,7 @@ const LiveTrackVisualizer = ({
 
     driversStateRef.current = basePositions;
     previousRankOrderRef.current = basePositions.map((c) => c.id);
-    onPositionsUpdate(basePositions);
-  }, [drivers, viewMode]);
+  }, [drivers]);
 
   // Speed calculation based on track curvature & DRS zones
   const calculateSpeedAtProgress = useCallback(
@@ -163,22 +150,42 @@ const LiveTrackVisualizer = ({
 
     const svgPath = pathRef.current;
     const drsZones = circuitDetails?.drsZones || [];
-    const lapDurationSec = circuitDetails?.averageLapTimeSec || 88.0;
+    const lapDuration = circuitDetails?.averageLapTimeSec || lapDurationSec || 88.0;
 
     const tick = (now) => {
       const dt = Math.min((now - lastFrameTimeRef.current) / 1000, 0.1);
       lastFrameTimeRef.current = now;
 
-      if (isPlaying && flagStatus !== 'RED') {
+      // In GP_REPLAY mode: track positions are mapped strictly from replay time
+      if (viewMode === 'GP_REPLAY') {
+        const leaderProg = (replayTimeSec % lapDuration) / lapDuration;
+        const currentLapNum = Math.floor(replayTimeSec / lapDuration) + 1;
+
+        driversStateRef.current.forEach((car, index) => {
+          // Staggered grid gap progression
+          const gapFraction = index * 0.014;
+          const carProg = (leaderProg - gapFraction + 1.0) % 1.0;
+          const { speed, isDrs } = calculateSpeedAtProgress(carProg, drsZones, index > 0 && gapFraction < 0.03);
+
+          car.progress = carProg;
+          car.lap = currentLapNum;
+          car.speed = speed * (car.paceFactor || 1.0);
+          car.drsOpen = isDrs && flagStatus === 'GREEN';
+        });
+
+        if (now - lastTimingSyncRef.current > 120) {
+          lastTimingSyncRef.current = now;
+          onPositionsUpdate([...driversStateRef.current]);
+        }
+      } else if (isPlaying && flagStatus !== 'RED') {
+        // In LIVE_TRACK mode: smooth continuous simulation
         const state = driversStateRef.current;
         const count = state.length;
 
-        let paceScale = (1.0 / lapDurationSec) * simulationSpeed;
+        let paceScale = (1.0 / lapDuration) * simulationSpeed;
         if (flagStatus === 'SC') paceScale *= 0.45;
         if (flagStatus === 'VSC') paceScale *= 0.60;
         if (flagStatus === 'YELLOW') paceScale *= 0.80;
-
-        let maxLap = highestLapRef.current;
 
         for (let i = 0; i < count; i++) {
           const car = state[i];
@@ -204,14 +211,8 @@ const LiveTrackVisualizer = ({
           const prevProg = car.progress;
           car.progress = (car.progress + deltaProgress) % 1.0;
 
-          // Cross start/finish line
           if (car.progress < prevProg) {
             car.lap += 1;
-            if (car.lap > maxLap) {
-              maxLap = car.lap;
-              highestLapRef.current = maxLap;
-              onLapChange(maxLap);
-            }
           }
         }
 
@@ -220,32 +221,29 @@ const LiveTrackVisualizer = ({
           lastTimingSyncRef.current = now;
           onPositionsUpdate([...state]);
 
-          // In LIVE_TRACK mode: check authentic rank order swaps (no duplicate spamming)
-          if (viewMode === 'LIVE_TRACK') {
-            const sortedCurrent = [...state].sort((a, b) => {
-              if (b.lap !== a.lap) return b.lap - a.lap;
-              return b.progress - a.progress;
-            });
-            const newRankOrder = sortedCurrent.map((c) => c.id);
-            const prevOrder = previousRankOrderRef.current;
+          // Check authentic rank order swaps (no duplicate spamming)
+          const sortedCurrent = [...state].sort((a, b) => {
+            if (b.lap !== a.lap) return b.lap - a.lap;
+            return b.progress - a.progress;
+          });
+          const newRankOrder = sortedCurrent.map((c) => c.id);
+          const prevOrder = previousRankOrderRef.current;
 
-            if (prevOrder.length === newRankOrder.length) {
-              for (let pos = 0; pos < newRankOrder.length; pos++) {
-                const driverId = newRankOrder[pos];
-                const prevPos = prevOrder.indexOf(driverId);
-                // If this driver just gained position
-                if (prevPos > pos) {
-                  const passedDriverId = prevOrder[pos];
-                  const overtaker = state.find((c) => c.id === driverId);
-                  const passedCar = state.find((c) => c.id === passedDriverId);
-                  if (overtaker && passedCar) {
-                    onOvertake(overtaker, passedCar);
-                  }
+          if (prevOrder.length === newRankOrder.length) {
+            for (let pos = 0; pos < newRankOrder.length; pos++) {
+              const driverId = newRankOrder[pos];
+              const prevPos = prevOrder.indexOf(driverId);
+              if (prevPos > pos) {
+                const passedDriverId = prevOrder[pos];
+                const overtaker = state.find((c) => c.id === driverId);
+                const passedCar = state.find((c) => c.id === passedDriverId);
+                if (overtaker && passedCar) {
+                  onOvertake(overtaker, passedCar);
                 }
               }
             }
-            previousRankOrderRef.current = newRankOrder;
           }
+          previousRankOrderRef.current = newRankOrder;
         }
       }
 
@@ -269,7 +267,7 @@ const LiveTrackVisualizer = ({
     return () => {
       if (animFrameIdRef.current) cancelAnimationFrame(animFrameIdRef.current);
     };
-  }, [trackLength, isPlaying, simulationSpeed, flagStatus, calculateSpeedAtProgress, circuitDetails, viewMode, onOvertake, onLapChange, onPositionsUpdate]);
+  }, [trackLength, isPlaying, simulationSpeed, flagStatus, calculateSpeedAtProgress, circuitDetails, viewMode, replayTimeSec, lapDurationSec, onOvertake, onPositionsUpdate]);
 
   // Compute Turn corner (x, y) coordinates for pill badges
   const turnMarkers = useMemo(() => {

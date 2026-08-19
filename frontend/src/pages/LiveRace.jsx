@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import toast from 'react-hot-toast';
 import { getF1NextRace } from '../services/api';
@@ -48,10 +48,21 @@ const HISTORICAL_REPLAYS = [
   { year: 2023, round: 22, name: '2023 Las Vegas Grand Prix (Night Street Battle)', circuitKey: 'LasVegas' },
 ];
 
+// Helper to format seconds into mm:ss or hh:mm:ss
+const formatTime = (totalSeconds) => {
+  const s = Math.floor(totalSeconds);
+  const hrs = Math.floor(s / 3600);
+  const mins = Math.floor((s % 3600) / 60);
+  const secs = s % 60;
+  if (hrs > 0) {
+    return `${hrs}:${mins < 10 ? '0' : ''}${mins}:${secs < 10 ? '0' : ''}${secs}`;
+  }
+  return `${mins < 10 ? '0' : ''}${mins}:${secs < 10 ? '0' : ''}${secs}`;
+};
+
 const LiveRace = () => {
   // Modes: 'COUNTDOWN' | 'LIVE_TRACK' | 'GP_REPLAY'
   const [activeMode, setActiveMode] = useState('COUNTDOWN');
-  // Default to Dutch Grand Prix (Circuit Zandvoort) as upcoming race on Aug 23, 2026!
   const [selectedCircuitKey, setSelectedCircuitKey] = useState('Zandvoort');
   const [circuitDetails, setCircuitDetails] = useState(CIRCUIT_DETAILS.Zandvoort);
   const [nextRaceData, setNextRaceData] = useState({
@@ -75,12 +86,17 @@ const LiveRace = () => {
   const [flagStatus, setFlagStatus] = useState('GREEN');
   const [currentLap, setCurrentLap] = useState(1);
   const [totalLaps, setTotalLaps] = useState(72);
+  const [replayTimeSec, setReplayTimeSec] = useState(0);
   const [selectedReplayIndex, setSelectedReplayIndex] = useState(0);
   const [replayTimeline, setReplayTimeline] = useState([]);
   const [raceEvents, setRaceEvents] = useState([
     { id: 1, text: '🟢 Green Flag! Real-time session active on circuit.', time: 'Lap 1' },
     { id: 2, text: '📡 DRS zones enabled by FIA Race Control.', time: 'Lap 2' },
   ]);
+
+  const lastTickTimeRef = useRef(performance.now());
+  const lapDurationSec = circuitDetails?.averageLapTimeSec || 88.0;
+  const totalRaceDurationSec = totalLaps * lapDurationSec;
 
   // Load upcoming race metadata from API on mount
   useEffect(() => {
@@ -106,60 +122,8 @@ const LiveRace = () => {
     setCircuitDetails(details);
     setTotalLaps(details.totalLaps);
     setCurrentLap(1);
+    setReplayTimeSec(0);
     toast.success(`Loaded ${details.name}`);
-  };
-
-  // Handle overtakes on track
-  const handleOvertake = useCallback((overtaker, passedCar) => {
-    playPaddleShift(1.2);
-    const newEvent = {
-      id: `${Date.now()}-${overtaker.id}`,
-      text: `🏎️ ${overtaker.name} (${overtaker.code}) overtook ${passedCar.name} (${passedCar.code})!`,
-      time: `Lap ${overtaker.lap || 1}`,
-    };
-    setRaceEvents((prev) => [newEvent, ...prev.slice(0, 14)]);
-  }, []);
-
-  // Load selected historical GP replay data
-  const handleSelectReplay = async (idx) => {
-    playPaddleShift(1.1);
-    setSelectedReplayIndex(idx);
-    const replayInfo = HISTORICAL_REPLAYS[idx];
-    toast.loading(`Fetching official session replay for ${replayInfo.name}...`, { id: 'replay-load' });
-
-    const replayData = await loadHistoricalGPReplay(replayInfo.year, replayInfo.round);
-    toast.dismiss('replay-load');
-
-    if (replayData.success && replayData.lapsTimeline.length > 0) {
-      setDrivers(replayData.drivers);
-      setTotalLaps(replayData.totalLaps);
-      setReplayTimeline(replayData.lapsTimeline);
-      setCurrentLap(1);
-
-      const details = getCircuitDetails(replayInfo.circuitKey);
-      setSelectedCircuitKey(details.file);
-      setCircuitDetails(details);
-
-      const overtakesList = [];
-      replayData.lapsTimeline.forEach((lapItem) => {
-        lapItem.overtakes.forEach((o) => {
-          overtakesList.push({
-            id: `${o.lap}-${o.overtaker.code}`,
-            text: `🏎️ ${o.overtaker.name} (${o.overtaker.code}) overtook ${o.passed.name} for P${o.newPos}!`,
-            time: `Lap ${o.lap}`,
-          });
-        });
-      });
-
-      if (overtakesList.length > 0) {
-        setRaceEvents(overtakesList.slice(0, 15));
-      }
-
-      setActiveMode('GP_REPLAY');
-      toast.success(`Official replay loaded: ${replayInfo.name}`);
-    } else {
-      toast.error('Failed to load replay data, using default session.');
-    }
   };
 
   // Helper to extract events up to a given lap
@@ -184,26 +148,107 @@ const LiveRace = () => {
     return events.reverse().slice(0, 15);
   };
 
-  // Handle lap scrub in replay mode (acts like a video player progress bar)
-  const handleLapScrub = (lapNum) => {
-    const lap = Math.max(1, Math.min(totalLaps, parseInt(lapNum, 10)));
+  // YouTube-style continuous playback loop for GP_REPLAY mode
+  useEffect(() => {
+    if (activeMode !== 'GP_REPLAY') return;
+
+    let animId;
+    const playTick = (now) => {
+      const dt = Math.min((now - lastTickTimeRef.current) / 1000, 0.1);
+      lastTickTimeRef.current = now;
+
+      if (isPlaying && flagStatus !== 'RED') {
+        setReplayTimeSec((prevTime) => {
+          const nextTime = prevTime + dt * simulationSpeed;
+          if (nextTime >= totalRaceDurationSec) {
+            setIsPlaying(false);
+            return totalRaceDurationSec;
+          }
+
+          // Compute lap from exact replay time
+          const calculatedLap = Math.min(totalLaps, Math.floor(nextTime / lapDurationSec) + 1);
+          if (calculatedLap !== currentLap) {
+            setCurrentLap(calculatedLap);
+            if (replayTimeline[calculatedLap - 1]) {
+              const updatedEvents = getEventsUpToLap(replayTimeline, calculatedLap);
+              if (updatedEvents.length > 0) setRaceEvents(updatedEvents);
+            }
+          }
+          return nextTime;
+        });
+      }
+
+      animId = requestAnimationFrame(playTick);
+    };
+
+    lastTickTimeRef.current = performance.now();
+    animId = requestAnimationFrame(playTick);
+    return () => cancelAnimationFrame(animId);
+  }, [activeMode, isPlaying, simulationSpeed, flagStatus, lapDurationSec, totalLaps, totalRaceDurationSec, currentLap, replayTimeline]);
+
+  // Load selected historical GP replay data
+  const handleSelectReplay = async (idx) => {
+    playPaddleShift(1.1);
+    setSelectedReplayIndex(idx);
+    const replayInfo = HISTORICAL_REPLAYS[idx];
+    toast.loading(`Fetching official session replay for ${replayInfo.name}...`, { id: 'replay-load' });
+
+    const replayData = await loadHistoricalGPReplay(replayInfo.year, replayInfo.round);
+    toast.dismiss('replay-load');
+
+    if (replayData.success && replayData.lapsTimeline.length > 0) {
+      setDrivers(replayData.drivers);
+      setLiveDrivers(replayData.drivers);
+      setTotalLaps(replayData.totalLaps);
+      setReplayTimeline(replayData.lapsTimeline);
+      setCurrentLap(1);
+      setReplayTimeSec(0);
+
+      const details = getCircuitDetails(replayInfo.circuitKey);
+      setSelectedCircuitKey(details.file);
+      setCircuitDetails(details);
+
+      const initialEvents = getEventsUpToLap(replayData.lapsTimeline, 1);
+      if (initialEvents.length > 0) {
+        setRaceEvents(initialEvents);
+      }
+
+      setActiveMode('GP_REPLAY');
+      toast.success(`Official replay loaded: ${replayInfo.name}`);
+    } else {
+      toast.error('Failed to load replay data, using default session.');
+    }
+  };
+
+  // Video-player style seeking / scrubbing
+  const handleSeekReplayTime = (seekSec) => {
+    const time = Math.max(0, Math.min(totalRaceDurationSec, parseFloat(seekSec)));
+    setReplayTimeSec(time);
+    const lap = Math.min(totalLaps, Math.floor(time / lapDurationSec) + 1);
     setCurrentLap(lap);
+
     if (replayTimeline[lap - 1]) {
-      const lapPositions = replayTimeline[lap - 1].positions.map((p, idx) => ({
-        ...p,
-        lap,
-        progress: (0.99 - idx * 0.016 + 1.0) % 1.0,
-      }));
+      const lapPositions = replayTimeline[lap - 1].positions;
       setDrivers(lapPositions);
       setLiveDrivers(lapPositions);
 
-      // Show real events for this exact lap
-      const filteredEvents = getEventsUpToLap(replayTimeline, lap);
-      if (filteredEvents.length > 0) {
-        setRaceEvents(filteredEvents);
+      const updatedEvents = getEventsUpToLap(replayTimeline, lap);
+      if (updatedEvents.length > 0) {
+        setRaceEvents(updatedEvents);
       }
     }
   };
+
+  // Handle overtakes on track in LIVE_TRACK mode
+  const handleOvertake = useCallback((overtaker, passedCar) => {
+    playPaddleShift(1.2);
+    const newEvent = {
+      id: `${Date.now()}-${overtaker.id}`,
+      text: `🏎️ ${overtaker.name} (${overtaker.code}) overtook ${passedCar.name} (${passedCar.code})!`,
+      time: `Lap ${overtaker.lap || 1}`,
+    };
+    setRaceEvents((prev) => [newEvent, ...prev.slice(0, 14)]);
+  }, []);
 
   const handleTogglePlay = () => {
     playPaddleShift(1.1);
@@ -223,7 +268,7 @@ const LiveRace = () => {
     });
   };
 
-  const selectedDriver = drivers.find((d) => d.id === selectedDriverId) || null;
+  const selectedDriver = (liveDrivers.length > 0 ? liveDrivers : drivers).find((d) => d.id === selectedDriverId) || null;
 
   return (
     <div className="max-w-7xl mx-auto space-y-6 pb-12">
@@ -266,6 +311,9 @@ const LiveRace = () => {
               onClick={() => {
                 playPaddleShift(1.0);
                 setActiveMode(tab.mode);
+                if (tab.mode === 'GP_REPLAY' && replayTimeline.length === 0) {
+                  handleSelectReplay(0);
+                }
               }}
               className={`px-4 py-2 rounded-xl font-mono text-xs font-bold transition-all ${
                 activeMode === tab.mode
@@ -286,20 +334,23 @@ const LiveRace = () => {
           circuitDetails={circuitDetails}
           drivers={drivers}
           onEnterLiveStream={() => setActiveMode('LIVE_TRACK')}
-          onSelectReplay={() => setActiveMode('GP_REPLAY')}
+          onSelectReplay={() => {
+            setActiveMode('GP_REPLAY');
+            handleSelectReplay(0);
+          }}
         />
       )}
 
       {/* ── Mode 2, 3: Live 2D Track Telemetry & GP Replay ── */}
       {activeMode !== 'COUNTDOWN' && (
         <>
-          {/* ── Playback Controls & Replay Scrubber ── */}
-          <div className="p-3 rounded-2xl bg-[#090b10] border border-white/10 flex flex-wrap items-center justify-between gap-3 shadow-xl">
+          {/* ── Video Player Style Control Bar ── */}
+          <div className="p-3.5 rounded-2xl bg-[#090b10] border border-white/10 flex flex-wrap items-center justify-between gap-3 shadow-xl">
             {/* Left: Play/Pause & Speed */}
             <div className="flex items-center gap-2">
               <button
                 onClick={handleTogglePlay}
-                className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/10 text-white font-mono text-xs font-bold transition-all flex items-center gap-1.5"
+                className="px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/20 border border-white/10 text-white font-mono text-xs font-bold transition-all flex items-center gap-2"
               >
                 <span>{isPlaying ? '⏸️ PAUSE' : '▶️ PLAY'}</span>
               </button>
@@ -322,26 +373,30 @@ const LiveRace = () => {
               </div>
             </div>
 
-            {/* Middle: If GP_REPLAY, Lap Video Progress Scrubber */}
+            {/* Middle: YouTube-Style Telemetry Video Scrubber */}
             {activeMode === 'GP_REPLAY' ? (
-              <div className="flex items-center gap-3 flex-1 max-w-lg mx-2 bg-black/40 px-3 py-1.5 rounded-xl border border-white/10">
-                <div className="text-xs font-mono font-bold shrink-0 text-white flex items-center gap-1.5">
+              <div className="flex items-center gap-3 flex-1 max-w-xl mx-2 bg-black/50 px-4 py-2 rounded-xl border border-white/10">
+                {/* Time & Lap Label */}
+                <div className="text-xs font-mono font-bold shrink-0 text-white flex items-center gap-2">
                   <span className="w-2 h-2 rounded-full bg-f1red animate-pulse" />
-                  <span>LAP {currentLap} / {totalLaps}</span>
-                  <span className="text-gray-500 text-[10px]">({Math.round((currentLap / totalLaps) * 100)}%)</span>
+                  <span>{formatTime(replayTimeSec)} / {formatTime(totalRaceDurationSec)}</span>
+                  <span className="text-gray-400 text-[11px]">· LAP {currentLap}/{totalLaps}</span>
                 </div>
+
+                {/* Smooth Video Seek Slider */}
                 <input
                   type="range"
-                  min="1"
-                  max={totalLaps}
-                  value={currentLap}
-                  onChange={(e) => handleLapScrub(e.target.value)}
-                  className="w-full h-2 bg-white/15 rounded-lg appearance-none cursor-pointer accent-f1red transition-all"
-                  title="Drag to seek race lap"
+                  min="0"
+                  max={totalRaceDurationSec}
+                  step="1"
+                  value={replayTimeSec}
+                  onChange={(e) => handleSeekReplayTime(e.target.value)}
+                  className="w-full h-2 bg-white/20 rounded-lg appearance-none cursor-pointer accent-f1red transition-all"
+                  title="Drag timeline to seek race"
                 />
               </div>
             ) : (
-              /* Middle: Race Flags */
+              /* Middle: Race Flags in Live Mode */
               <div className="flex items-center gap-1.5">
                 <span className="text-[10px] font-mono text-gray-500 uppercase tracking-widest hidden md:inline mr-1">
                   FLAGS:
@@ -421,23 +476,9 @@ const LiveRace = () => {
                 simulationSpeed={simulationSpeed}
                 flagStatus={flagStatus}
                 viewMode={activeMode}
-                currentLap={currentLap}
+                replayTimeSec={replayTimeSec}
+                lapDurationSec={lapDurationSec}
                 onOvertake={handleOvertake}
-                onLapChange={(newLap) => {
-                  const targetLap = Math.min(newLap, totalLaps);
-                  setCurrentLap(targetLap);
-                  if (activeMode === 'GP_REPLAY' && replayTimeline[targetLap - 1]) {
-                    const lapPositions = replayTimeline[targetLap - 1].positions.map((p, idx) => ({
-                      ...p,
-                      lap: targetLap,
-                      progress: (0.99 - idx * 0.016 + 1.0) % 1.0,
-                    }));
-                    setDrivers(lapPositions);
-                    setLiveDrivers(lapPositions);
-                    const updatedEvents = getEventsUpToLap(replayTimeline, targetLap);
-                    if (updatedEvents.length > 0) setRaceEvents(updatedEvents);
-                  }
-                }}
                 onPositionsUpdate={setLiveDrivers}
               />
 
@@ -475,7 +516,7 @@ const LiveRace = () => {
                 onSelectDriver={setSelectedDriverId}
                 currentLap={currentLap}
                 totalLaps={totalLaps}
-                lapDurationSec={circuitDetails?.averageLapTimeSec || 88.0}
+                lapDurationSec={lapDurationSec}
               />
             </div>
           </div>
