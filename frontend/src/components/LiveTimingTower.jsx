@@ -1,6 +1,7 @@
+import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { playPaddleShift } from '../utils/audio';
-import { getTeamName } from '../utils/teamColors';
+import { getTeamCode, getTeamName } from '../utils/teamColors';
 
 const TIRE_COLORS = {
   SOFT:   { bg: '#E10600', text: '#FFFFFF', label: 'S' },
@@ -18,6 +19,8 @@ const LiveTimingTower = ({
   totalLaps = 57,
   lapDurationSec = 88.0,
 }) => {
+  const [timingMode, setTimingMode] = useState('INTERVAL'); // 'INTERVAL' | 'GAP_LEADER'
+
   // Sort drivers based on simulated lap and track progress
   const sortedDrivers = [...drivers].sort((a, b) => {
     if ((b.lap || 1) !== (a.lap || 1)) {
@@ -30,51 +33,68 @@ const LiveTimingTower = ({
 
   return (
     <div className="w-full flex flex-col rounded-3xl bg-[#090b10] border border-white/10 overflow-hidden shadow-2xl">
-      {/* Timing Tower Header */}
-      <div className="px-5 py-3.5 bg-black/60 border-b border-white/10 flex items-center justify-between">
+      {/* ── Timing Tower Header (MultiViewer Style) ── */}
+      <div className="px-4 py-3 bg-black/70 border-b border-white/10 flex items-center justify-between flex-wrap gap-2">
         <div className="flex items-center gap-2">
           <span className="w-2.5 h-2.5 rounded-full bg-f1red animate-pulse" />
-          <span className="text-xs font-mono font-black tracking-[0.2em] uppercase text-white">
+          <span className="text-xs font-mono font-black tracking-[0.15em] uppercase text-white">
             LIVE TIMING TOWER
           </span>
+          <span className="px-1.5 py-0.2 rounded bg-red-600/20 text-red-500 text-[9px] font-mono font-black uppercase">
+            RACE
+          </span>
         </div>
-        <span className="text-[11px] font-mono text-gray-400 font-bold">
-          LAP {currentLap} / {totalLaps}
-        </span>
+
+        {/* Mode Toggle & Lap Counter */}
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setTimingMode((m) => (m === 'INTERVAL' ? 'GAP_LEADER' : 'INTERVAL'))}
+            className="px-2 py-0.5 rounded-lg bg-white/5 hover:bg-white/10 text-[9px] font-mono text-gray-300 font-bold border border-white/10 transition-all"
+            title="Toggle Interval to Car Ahead / Gap to Leader"
+          >
+            {timingMode === 'INTERVAL' ? '⏱️ INTERVAL' : '🏁 TO LEADER'}
+          </button>
+          <span className="text-[11px] font-mono text-gray-400 font-bold">
+            LAP {currentLap} / {totalLaps}
+          </span>
+        </div>
       </div>
 
-      {/* Driver Standings Rows */}
-      <div className="flex-1 overflow-y-auto max-h-[540px] divide-y divide-white/5 scrollbar-thin scrollbar-thumb-white/10">
+      {/* ── Driver Standings Rows (MultiViewer Style) ── */}
+      <div className="flex-1 overflow-y-auto max-h-[560px] divide-y divide-white/5 scrollbar-thin scrollbar-thumb-white/10">
         {sortedDrivers.map((driver, index) => {
           const isSelected = selectedDriverId === driver.id;
           const isLeader = index === 0;
           const tire = driver.tire || (index % 3 === 0 ? 'SOFT' : index % 2 === 0 ? 'MEDIUM' : 'HARD');
           const tireData = TIRE_COLORS[tire] || TIRE_COLORS.MEDIUM;
-          const teamDisplayName = getTeamName(driver.team, driver) || (typeof driver.team === 'string' ? driver.team : 'F1 Team');
+          const teamCode = getTeamCode(driver.team, driver);
+          const tireAge = driver.tireAge || Math.max(1, (currentLap % 22) + 1);
+          const pitCount = driver.pitCount !== undefined ? driver.pitCount : driver.pitted ? 1 : 0;
+          const posChange = driver.posChange !== undefined ? driver.posChange : 0;
 
-          // Compute real dynamic time gap based on track progress and authentic lap time
-          let intervalDisplay = 'LEADER';
+          // Compute interval to car ahead and gap to leader
+          let gapDisplay = 'LEADER';
           if (driver.inPit || driver.pitState === 'IN_BOX') {
-            intervalDisplay = driver.pitState === 'IN_BOX' ? '🔧 BOX 2.4s' : '🔧 IN PIT';
+            gapDisplay = driver.pitState === 'IN_BOX' ? '🔧 BOX 2.4s' : '🔧 IN PIT';
           } else if (!isLeader && leader) {
             const lapDiff = (leader.lap || 1) - (driver.lap || 1);
             let progressDiff = (leader.progress || 0) - (driver.progress || 0);
             if (progressDiff < 0) progressDiff += 1.0;
             const totalGapSec = lapDiff * lapDurationSec + progressDiff * lapDurationSec;
 
-            if (lapDiff >= 1) {
-              intervalDisplay = `+${lapDiff} LAP`;
-            } else if (totalGapSec > 0.05) {
-              intervalDisplay = `+${totalGapSec.toFixed(3)}s`;
+            if (timingMode === 'INTERVAL') {
+              const intervalVal = driver.intervalToCarAheadSec !== undefined
+                ? driver.intervalToCarAheadSec
+                : Math.max(0.2, (totalGapSec / (index || 1)));
+              gapDisplay = `+${intervalVal.toFixed(3)}`;
             } else {
-              intervalDisplay = `+${(0.05 + index * 0.12).toFixed(3)}s`;
+              if (lapDiff >= 1) {
+                gapDisplay = `+${lapDiff} LAP`;
+              } else {
+                gapDisplay = `+${totalGapSec.toFixed(3)}`;
+              }
             }
           }
-
-          // Format benchmark lap time
-          const baseMinutes = Math.floor(lapDurationSec / 60);
-          const baseSecs = (lapDurationSec % 60 + index * 0.18).toFixed(3);
-          const formattedLapTime = driver.inPit ? 'PIT LANE' : `${baseMinutes}:${baseSecs < 10 ? '0' : ''}${baseSecs}`;
 
           return (
             <motion.div
@@ -83,8 +103,8 @@ const LiveTimingTower = ({
                 playPaddleShift(1.0);
                 onSelectDriver(isSelected ? null : driver.id);
               }}
-              whileHover={{ backgroundColor: 'rgba(255, 255, 255, 0.04)' }}
-              className={`px-4 py-2.5 flex items-center justify-between cursor-pointer transition-all duration-150 relative ${
+              whileHover={{ backgroundColor: 'rgba(255, 255, 255, 0.05)' }}
+              className={`px-3 py-2 flex items-center justify-between cursor-pointer transition-all duration-150 relative text-xs font-mono ${
                 isSelected ? 'bg-white/10' : ''
               }`}
             >
@@ -94,91 +114,90 @@ const LiveTimingTower = ({
                 style={{ backgroundColor: driver.color }}
               />
 
-              {/* Left: Position & Driver info */}
-              <div className="flex items-center gap-3 min-w-0 pl-1.5">
-                {/* Position Number */}
-                <span
-                  className="w-5 text-center text-xs font-mono font-black shrink-0"
-                  style={{ color: isLeader ? '#FFD700' : '#FFFFFF' }}
+              {/* ── Left Section: Pos, TeamCode, DriverCode, PosChange ── */}
+              <div className="flex items-center gap-2 min-w-0 pl-1.5">
+                {/* Position Badge (P1 is Red Box like MultiViewer) */}
+                <div
+                  className={`w-5 h-5 rounded flex items-center justify-center text-[10px] font-black shrink-0 ${
+                    isLeader ? 'bg-f1red text-white' : 'bg-white/5 text-gray-200'
+                  }`}
                 >
                   {index + 1}
-                </span>
-
-                {/* Driver Avatar / Photo */}
-                <div
-                  className="w-7 h-7 rounded-full overflow-hidden shrink-0 border flex items-center justify-center bg-black/40"
-                  style={{ borderColor: `${driver.color}60` }}
-                >
-                  {driver.photo ? (
-                    <img
-                      src={driver.photo}
-                      alt={driver.name}
-                      className="w-full h-full object-cover object-top"
-                      onError={(e) => {
-                        e.currentTarget.style.display = 'none';
-                      }}
-                    />
-                  ) : (
-                    <span className="text-[9px] font-black" style={{ color: driver.color }}>
-                      {driver.code}
-                    </span>
-                  )}
                 </div>
 
-                {/* Name & Code */}
-                <div className="min-w-0">
-                  <div className="flex items-center gap-1.5 truncate">
-                    <span className="text-xs font-f1heading font-black text-white tracking-wide">
-                      {driver.code}
-                    </span>
-                    <span className="text-[11px] font-sans text-gray-400 truncate hidden sm:inline">
-                      {driver.name.split(' ').pop()}
-                    </span>
-                  </div>
-                  <div
-                    className="text-[9px] font-mono uppercase truncate font-bold"
-                    style={{ color: driver.color }}
+                {/* Team Code + Driver Code (e.g. RBR VER, FER HAM) */}
+                <div className="flex items-center gap-1.5 truncate">
+                  <span className="text-[10px] font-black uppercase text-gray-400">
+                    {teamCode}
+                  </span>
+                  <span
+                    className="text-xs font-f1heading font-black tracking-wider"
+                    style={{ color: isLeader ? '#FFD700' : '#FFFFFF' }}
                   >
-                    {teamDisplayName}
-                  </div>
+                    {driver.code}
+                  </span>
                 </div>
+
+                {/* Position Change Delta (▲2 green, ▼1 red, -) */}
+                <span
+                  className={`text-[9px] font-bold shrink-0 ${
+                    posChange > 0
+                      ? 'text-green-400'
+                      : posChange < 0
+                      ? 'text-red-400'
+                      : 'text-gray-500'
+                  }`}
+                  title={`Started P${driver.gridPos || (index + 1)}`}
+                >
+                  {posChange > 0 ? `▲${posChange}` : posChange < 0 ? `▼${Math.abs(posChange)}` : '—'}
+                </span>
               </div>
 
-              {/* Right: Tires, DRS, Gap */}
+              {/* ── Right Section: Interval, Pit Count, Tyre Compound & Age ── */}
               <div className="flex items-center gap-2.5 shrink-0">
-                {/* DRS Active badge */}
+                {/* DRS Badge */}
                 {driver.drsOpen && !driver.inPit && (
-                  <span className="px-1 py-0.2 rounded bg-amber-500/20 text-amber-400 text-[9px] font-mono font-bold">
+                  <span className="px-1 py-0.2 rounded bg-amber-500/20 text-amber-400 text-[8px] font-bold">
                     DRS
                   </span>
                 )}
 
-                {/* Tire Badge */}
-                <span
-                  className="w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-mono font-black"
-                  style={{ backgroundColor: tireData.bg, color: tireData.text }}
-                  title={`Tire Compound: ${tire}`}
-                >
-                  {tireData.label}
-                </span>
-
-                {/* Gap / Interval */}
-                <div className="w-16 text-right">
+                {/* Interval / Gap Display */}
+                <div className="w-14 text-right">
                   {driver.inPit ? (
-                    <span className="inline-block px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 border border-amber-500/30 text-[9px] font-mono font-bold animate-pulse">
+                    <span className="inline-block px-1 py-0.2 rounded bg-amber-500/20 text-amber-400 border border-amber-500/30 text-[9px] font-bold animate-pulse">
                       {driver.pitState === 'IN_BOX' ? 'BOX' : 'PIT'}
                     </span>
                   ) : (
-                    <div
-                      className="text-xs font-mono font-bold tabular-nums"
-                      style={{ color: isLeader ? '#FFD700' : '#CCCCCC' }}
+                    <span
+                      className="font-bold tabular-nums text-[11px]"
+                      style={{ color: isLeader ? '#FFD700' : '#E0E0E0' }}
                     >
-                      {intervalDisplay}
-                    </div>
+                      {gapDisplay}
+                    </span>
                   )}
-                  <div className="text-[9px] font-mono text-gray-500 tabular-nums">
-                    {formattedLapTime}
-                  </div>
+                </div>
+
+                {/* Pit Stops Pill Badge [ 1 ] */}
+                <span
+                  className="px-1.5 py-0.2 rounded bg-black/60 border border-white/10 text-[9px] text-gray-300 font-bold"
+                  title={`${pitCount} Pit Stop(s)`}
+                >
+                  {pitCount}
+                </span>
+
+                {/* Tyre Compound Badge + Tyre Age in Laps (MultiViewer Style) */}
+                <div className="flex items-center gap-1">
+                  <span
+                    className="w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-black border border-white/20"
+                    style={{ backgroundColor: tireData.bg, color: tireData.text }}
+                    title={`${tire} Compound`}
+                  >
+                    {tireData.label}
+                  </span>
+                  <span className="text-[10px] text-gray-400 font-bold tabular-nums w-4 text-right">
+                    {tireAge}
+                  </span>
                 </div>
               </div>
             </motion.div>

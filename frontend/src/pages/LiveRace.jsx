@@ -268,7 +268,13 @@ const LiveRace = () => {
     });
   };
 
+  const handleJumpTime = (deltaSec) => {
+    playPaddleShift(1.1);
+    handleSeekReplayTime(replayTimeSec + deltaSec);
+  };
+
   const selectedDriver = (liveDrivers.length > 0 ? liveDrivers : drivers).find((d) => d.id === selectedDriverId) || null;
+  const leaderDriver = (liveDrivers.length > 0 ? liveDrivers : drivers)[0] || null;
 
   return (
     <div className="max-w-7xl mx-auto space-y-6 pb-12">
@@ -299,7 +305,7 @@ const LiveRace = () => {
           </h1>
         </div>
 
-        {/* Mode Selector Tabs (Clean 3 Modes) */}
+        {/* Mode Selector Tabs */}
         <div className="flex items-center gap-1.5 bg-[#090b10] p-1.5 rounded-2xl border border-white/15 shadow-xl">
           {[
             { mode: 'COUNTDOWN',  label: '⏱️ Pre-Race Room' },
@@ -344,26 +350,54 @@ const LiveRace = () => {
       {/* ── Mode 2, 3: Live 2D Track Telemetry & GP Replay ── */}
       {activeMode !== 'COUNTDOWN' && (
         <>
-          {/* ── Video Player Style Control Bar ── */}
-          <div className="p-3.5 rounded-2xl bg-[#090b10] border border-white/10 flex flex-wrap items-center justify-between gap-3 shadow-xl">
-            {/* Left: Play/Pause & Speed */}
-            <div className="flex items-center gap-2">
+          {/* ── Video Player Style Control Bar (MultiViewer Style) ── */}
+          <div className="p-3 rounded-2xl bg-[#090b10] border border-white/10 flex flex-wrap items-center justify-between gap-3 shadow-xl">
+            {/* Left: Play/Pause & Quick Jump Buttons */}
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {activeMode === 'GP_REPLAY' && (
+                <div className="flex items-center gap-1">
+                  {[-60, -30, -5].map((sec) => (
+                    <button
+                      key={sec}
+                      onClick={() => handleJumpTime(sec)}
+                      className="px-2 py-1 rounded-lg bg-white/5 hover:bg-white/15 text-[10px] font-mono text-gray-300 font-bold border border-white/10 transition-all"
+                    >
+                      {sec < -59 ? '-1m' : `${sec}s`}
+                    </button>
+                  ))}
+                </div>
+              )}
+
               <button
                 onClick={handleTogglePlay}
-                className="px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/20 border border-white/10 text-white font-mono text-xs font-bold transition-all flex items-center gap-2"
+                className="px-3.5 py-1.5 rounded-xl bg-f1red hover:bg-red-700 text-white font-mono text-xs font-black shadow-lg shadow-red-900/30 transition-all flex items-center gap-1.5"
               >
                 <span>{isPlaying ? '⏸️ PAUSE' : '▶️ PLAY'}</span>
               </button>
 
-              {/* Speed toggles */}
-              <div className="flex items-center gap-1 bg-black/50 p-1 rounded-xl border border-white/10">
-                {[1.0, 2.0, 5.0, 10.0].map((s) => (
+              {activeMode === 'GP_REPLAY' && (
+                <div className="flex items-center gap-1">
+                  {[5, 30, 60].map((sec) => (
+                    <button
+                      key={sec}
+                      onClick={() => handleJumpTime(sec)}
+                      className="px-2 py-1 rounded-lg bg-white/5 hover:bg-white/15 text-[10px] font-mono text-gray-300 font-bold border border-white/10 transition-all"
+                    >
+                      {sec > 59 ? '+1m' : `+${sec}s`}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {/* Speed Multipliers */}
+              <div className="flex items-center gap-0.5 bg-black/50 p-1 rounded-xl border border-white/10 ml-1">
+                {[0.5, 1.0, 2.0, 5.0, 10.0, 20.0].map((s) => (
                   <button
                     key={s}
                     onClick={() => handleSpeedChange(s)}
-                    className={`px-2 py-0.5 rounded-lg text-xs font-mono font-bold transition-all ${
+                    className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-bold transition-all ${
                       simulationSpeed === s
-                        ? 'bg-amber-500 text-black shadow-md'
+                        ? 'bg-amber-500 text-black shadow-md font-black'
                         : 'text-gray-400 hover:text-white'
                     }`}
                   >
@@ -373,7 +407,7 @@ const LiveRace = () => {
               </div>
             </div>
 
-            {/* Middle: YouTube-Style Telemetry Video Scrubber */}
+            {/* Middle: MultiViewer Style Video Seek Scrubber */}
             {activeMode === 'GP_REPLAY' ? (
               <div className="flex items-center gap-3 flex-1 max-w-xl mx-2 bg-black/50 px-4 py-2 rounded-xl border border-white/10">
                 {/* Time & Lap Label */}
@@ -453,13 +487,14 @@ const LiveRace = () => {
             </div>
           </div>
 
-          {/* ── Race HUD Status ── */}
+          {/* ── Race HUD Status & MultiViewer Dual-Telemetry ── */}
           <LiveRaceHUD
             circuitDetails={circuitDetails}
             flagStatus={flagStatus}
             currentLap={currentLap}
             totalLaps={totalLaps}
             selectedDriver={selectedDriver}
+            leaderDriver={leaderDriver}
             onDeselectDriver={() => setSelectedDriverId(null)}
           />
 

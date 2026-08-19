@@ -152,6 +152,82 @@ export const TEAM_NAMES = {
   lancia: 'Lancia',
 };
 
+// 3-Letter Constructor Acronyms (MultiViewer & F1 Broadcast style)
+export const TEAM_CODES = {
+  mercedes: 'MER',
+  ferrari: 'FER',
+  mclaren: 'MCL',
+  red_bull: 'RBR',
+  redbull: 'RBR',
+  red_bull_racing: 'RBR',
+  aston_martin: 'AMR',
+  aston: 'AMR',
+  alpine: 'ALP',
+  williams: 'WIL',
+  kick_sauber: 'SAU',
+  stake_f1_team: 'SAU',
+  sauber: 'SAU',
+  audi: 'AUD',
+  haas: 'HAA',
+  haas_f1_team: 'HAA',
+  rb: 'RBU',
+  vcarb: 'RBU',
+  racing_bulls: 'RBU',
+  visa_cash_app_rb: 'RBU',
+  alphatauri: 'AT',
+  toro_rosso: 'STR',
+  cadillac: 'CAD',
+  racing_point: 'RP',
+  force_india: 'FI',
+  renault: 'REN',
+  lotus: 'LOT',
+  brawn: 'BGP',
+};
+
+/**
+ * Intelligent team code resolver (e.g. 'RBR', 'FER', 'MCL', 'MER', 'WIL').
+ */
+export function getTeamCode(team, driver = null) {
+  let rawTeam = '';
+  if (typeof team === 'string') {
+    rawTeam = team;
+  } else if (team && typeof team === 'object') {
+    rawTeam = team.name || team._id || team.constructorId || '';
+  }
+
+  const teamSlug = rawTeam.toLowerCase().trim().replace(/[\s-]+/g, '_');
+  if (TEAM_CODES[teamSlug]) return TEAM_CODES[teamSlug];
+  if (teamSlug.includes('mercedes')) return 'MER';
+  if (teamSlug.includes('ferrari')) return 'FER';
+  if (teamSlug.includes('mclaren')) return 'MCL';
+  if (teamSlug.includes('red_bull') || teamSlug.includes('redbull')) return 'RBR';
+  if (teamSlug.includes('aston')) return 'AMR';
+  if (teamSlug.includes('alpine')) return 'ALP';
+  if (teamSlug.includes('williams')) return 'WIL';
+  if (teamSlug.includes('kick') || teamSlug.includes('sauber') || teamSlug.includes('stake') || teamSlug.includes('audi')) return 'SAU';
+  if (teamSlug.includes('haas')) return 'HAA';
+  if (teamSlug.includes('rb') || teamSlug.includes('vcarb') || teamSlug.includes('racing_bull')) return 'RBU';
+  if (teamSlug.includes('cadillac')) return 'CAD';
+
+  // Driver fallback
+  let rawDriver = '';
+  if (typeof driver === 'string') rawDriver = driver;
+  else if (driver && typeof driver === 'object') rawDriver = `${driver.name || ''} ${driver.driverId || ''} ${driver.code || ''}`;
+  const dSlug = rawDriver.toLowerCase().trim();
+  if (dSlug.includes('verstappen') || dSlug.includes('lawson') || dSlug.includes('perez') || dSlug.includes('ver')) return 'RBR';
+  if (dSlug.includes('leclerc') || dSlug.includes('hamilton') || dSlug.includes('sainz') || dSlug.includes('lec') || dSlug.includes('ham')) return 'FER';
+  if (dSlug.includes('norris') || dSlug.includes('piastri') || dSlug.includes('nor') || dSlug.includes('pia')) return 'MCL';
+  if (dSlug.includes('russell') || dSlug.includes('antonelli') || dSlug.includes('rus') || dSlug.includes('ant')) return 'MER';
+  if (dSlug.includes('alonso') || dSlug.includes('stroll') || dSlug.includes('alo') || dSlug.includes('str')) return 'AMR';
+  if (dSlug.includes('gasly') || dSlug.includes('doohan') || dSlug.includes('gas') || dSlug.includes('doo')) return 'ALP';
+  if (dSlug.includes('albon') || dSlug.includes('colapinto') || dSlug.includes('alb') || dSlug.includes('col')) return 'WIL';
+  if (dSlug.includes('bearman') || dSlug.includes('ocon') || dSlug.includes('magnussen') || dSlug.includes('bea') || dSlug.includes('oco')) return 'HAA';
+  if (dSlug.includes('hulkenberg') || dSlug.includes('bortoleto') || dSlug.includes('bottas') || dSlug.includes('zhou') || dSlug.includes('hul') || dSlug.includes('bor')) return 'SAU';
+  if (dSlug.includes('tsunoda') || dSlug.includes('hadjar') || dSlug.includes('ricciardo') || dSlug.includes('tsu') || dSlug.includes('had')) return 'RBU';
+
+  return (rawTeam.substring(0, 3) || 'F1').toUpperCase();
+}
+
 // Driver photo asset mapping
 export const DRIVER_PHOTO_FILES = {
   verstappen: '/images/drivers/max_verstappen.webp',
