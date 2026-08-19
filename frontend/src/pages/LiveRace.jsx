@@ -10,75 +10,85 @@ import LiveRaceHUD from '../components/LiveRaceHUD';
 import PreRaceCountdownView from '../components/PreRaceCountdownView';
 import { playPaddleShift, playStartingBeep } from '../utils/audio';
 
-const AVAILABLE_CIRCUITS = [
-  { key: 'bahrain',          name: 'Bahrain Grand Prix (Sakhir)' },
-  { key: 'Jeddah',           name: 'Saudi Arabian Grand Prix (Jeddah)' },
-  { key: 'AlbertPark',       name: 'Australian Grand Prix (Melbourne)' },
-  { key: 'Suzuka',           name: 'Japanese Grand Prix (Suzuka)' },
-  { key: 'Shanghai',         name: 'Chinese Grand Prix (Shanghai)' },
-  { key: 'Miami',            name: 'Miami Grand Prix (Miami)' },
-  { key: 'Imola',            name: 'Emilia Romagna Grand Prix (Imola)' },
-  { key: 'monaco',           name: 'Monaco Grand Prix (Monte Carlo)' },
-  { key: 'GillesVilleneuve', name: 'Canadian Grand Prix (Montreal)' },
-  { key: 'Catalunya',        name: 'Spanish Grand Prix (Barcelona)' },
-  { key: 'austria',          name: 'Austrian Grand Prix (Red Bull Ring)' },
-  { key: 'silverstone',      name: 'British Grand Prix (Silverstone)' },
-  { key: 'hungaroring',      name: 'Hungarian Grand Prix (Hungaroring)' },
-  { key: 'Spa',              name: 'Belgian Grand Prix (Spa-Francorchamps)' },
-  { key: 'Zandvoort',        name: 'Dutch Grand Prix (Zandvoort)' },
-  { key: 'monza',            name: 'Italian Grand Prix (Monza)' },
-  { key: 'baku',             name: 'Azerbaijan Grand Prix (Baku)' },
-  { key: 'marinabay',        name: 'Singapore Grand Prix (Marina Bay)' },
-  { key: 'Americas',         name: 'United States Grand Prix (COTA)' },
-  { key: 'HermanosRodriguez',name: 'Mexico City Grand Prix (Hermanos Rodríguez)' },
-  { key: 'Interlagos',       name: 'São Paulo Grand Prix (Interlagos)' },
-  { key: 'LasVegas',         name: 'Las Vegas Grand Prix (Las Vegas)' },
-  { key: 'Lusail',           name: 'Qatar Grand Prix (Lusail)' },
-  { key: 'AbuDhabi',         name: 'Abu Dhabi Grand Prix (Yas Marina)' },
+// Official FIA Formula 1 World Championship Calendar
+const OFFICIAL_F1_CALENDAR = [
+  { key: 'bahrain',          name: 'Round 1: Bahrain Grand Prix (Sakhir)' },
+  { key: 'Jeddah',           name: 'Round 2: Saudi Arabian Grand Prix (Jeddah)' },
+  { key: 'AlbertPark',       name: 'Round 3: Australian Grand Prix (Melbourne)' },
+  { key: 'Suzuka',           name: 'Round 4: Japanese Grand Prix (Suzuka)' },
+  { key: 'Shanghai',         name: 'Round 5: Chinese Grand Prix (Shanghai)' },
+  { key: 'Miami',            name: 'Round 6: Miami Grand Prix (Miami)' },
+  { key: 'Imola',            name: 'Round 7: Emilia Romagna Grand Prix (Imola)' },
+  { key: 'monaco',           name: 'Round 8: Monaco Grand Prix (Monte Carlo)' },
+  { key: 'GillesVilleneuve', name: 'Round 9: Canadian Grand Prix (Montreal)' },
+  { key: 'Catalunya',        name: 'Round 10: Spanish Grand Prix (Barcelona)' },
+  { key: 'austria',          name: 'Round 11: Austrian Grand Prix (Red Bull Ring)' },
+  { key: 'silverstone',      name: 'Round 12: British Grand Prix (Silverstone)' },
+  { key: 'hungaroring',      name: 'Round 13: Hungarian Grand Prix (Hungaroring)' },
+  { key: 'Spa',              name: 'Round 14: Belgian Grand Prix (Spa-Francorchamps)' },
+  { key: 'Zandvoort',        name: 'Round 15: Dutch Grand Prix (Zandvoort)' },
+  { key: 'monza',            name: 'Round 16: Italian Grand Prix (Monza)' },
+  { key: 'baku',             name: 'Round 17: Azerbaijan Grand Prix (Baku)' },
+  { key: 'marinabay',        name: 'Round 18: Singapore Grand Prix (Marina Bay)' },
+  { key: 'Americas',         name: 'Round 19: United States Grand Prix (Austin - COTA)' },
+  { key: 'HermanosRodriguez',name: 'Round 20: Mexico City Grand Prix (Hermanos Rodríguez)' },
+  { key: 'Interlagos',       name: 'Round 21: São Paulo Grand Prix (Interlagos)' },
+  { key: 'LasVegas',         name: 'Round 22: Las Vegas Grand Prix (Las Vegas Strip)' },
+  { key: 'Lusail',           name: 'Round 23: Qatar Grand Prix (Lusail)' },
+  { key: 'AbuDhabi',         name: 'Round 24: Abu Dhabi Grand Prix (Yas Marina)' },
 ];
 
 const HISTORICAL_REPLAYS = [
-  { year: 2024, round: 24, name: '2024 Abu Dhabi Grand Prix (Yas Marina)', circuitKey: 'AbuDhabi' },
-  { year: 2024, round: 12, name: '2024 British Grand Prix (Silverstone)', circuitKey: 'silverstone' },
-  { year: 2024, round: 16, name: '2024 Italian Grand Prix (Monza)', circuitKey: 'monza' },
-  { year: 2024, round: 14, name: '2024 Belgian Grand Prix (Spa)', circuitKey: 'Spa' },
-  { year: 2024, round: 1,  name: '2024 Bahrain Grand Prix (Sakhir)', circuitKey: 'bahrain' },
-  { year: 2023, round: 22, name: '2023 Las Vegas Grand Prix', circuitKey: 'LasVegas' },
-  { year: 2023, round: 6,  name: '2023 Monaco Grand Prix', circuitKey: 'monaco' },
+  { year: 2024, round: 12, name: '2024 British GP (Lewis Hamilton 9th Silverstone Win)', circuitKey: 'silverstone' },
+  { year: 2024, round: 24, name: '2024 Abu Dhabi Grand Prix (Season Finale)', circuitKey: 'AbuDhabi' },
+  { year: 2024, round: 16, name: '2024 Italian Grand Prix (Ferrari Monza Masterclass)', circuitKey: 'monza' },
+  { year: 2024, round: 14, name: '2024 Belgian Grand Prix (Spa High-Speed Battle)', circuitKey: 'Spa' },
+  { year: 2024, round: 15, name: '2024 Dutch Grand Prix (Zandvoort Victory)', circuitKey: 'Zandvoort' },
+  { year: 2024, round: 8,  name: '2024 Monaco Grand Prix (Charles Leclerc Home Win)', circuitKey: 'monaco' },
+  { year: 2023, round: 22, name: '2023 Las Vegas Grand Prix (Night Street Battle)', circuitKey: 'LasVegas' },
 ];
 
 const LiveRace = () => {
   // Modes: 'COUNTDOWN' | 'PRE_GRID' | 'LIVE_BROADCAST' | 'GP_REPLAY'
   const [activeMode, setActiveMode] = useState('LIVE_BROADCAST');
-  const [selectedCircuitKey, setSelectedCircuitKey] = useState('bahrain');
-  const [circuitDetails, setCircuitDetails] = useState(CIRCUIT_DETAILS.bahrain);
-  const [nextRaceData, setNextRaceData] = useState(null);
+  // Default to Dutch Grand Prix (Circuit Zandvoort) as upcoming race on Aug 23, 2026!
+  const [selectedCircuitKey, setSelectedCircuitKey] = useState('Zandvoort');
+  const [circuitDetails, setCircuitDetails] = useState(CIRCUIT_DETAILS.Zandvoort);
+  const [nextRaceData, setNextRaceData] = useState({
+    name: 'Dutch Grand Prix',
+    circuitName: 'Circuit Zandvoort',
+    circuitId: 'zandvoort',
+    country: 'Netherlands',
+    date: '2026-08-23',
+    time: '13:00:00Z',
+    firstPractice: { date: '2026-08-21', time: '10:30:00Z' },
+    sprintQualifying: { date: '2026-08-21', time: '14:30:00Z' },
+    sprint: { date: '2026-08-22', time: '10:00:00Z' },
+    qualifying: { date: '2026-08-22', time: '14:00:00Z' },
+  });
+
   const [drivers, setDrivers] = useState(DEFAULT_DRIVERS);
   const [selectedDriverId, setSelectedDriverId] = useState(null);
   const [isPlaying, setIsPlaying] = useState(true);
   const [simulationSpeed, setSimulationSpeed] = useState(1.0);
   const [flagStatus, setFlagStatus] = useState('GREEN');
   const [currentLap, setCurrentLap] = useState(1);
-  const [totalLaps, setTotalLaps] = useState(57);
+  const [totalLaps, setTotalLaps] = useState(72);
   const [selectedReplayIndex, setSelectedReplayIndex] = useState(0);
   const [replayTimeline, setReplayTimeline] = useState([]);
   const [raceEvents, setRaceEvents] = useState([
-    { id: 1, text: '🟢 Lights out and away we go! Clean start into Turn 1.', time: 'Lap 1' },
-    { id: 2, text: '📡 DRS enabled by Race Control on all designated zones.', time: 'Lap 2' },
+    { id: 1, text: '🟢 Green Flag! Real-time session active on circuit.', time: 'Lap 1' },
+    { id: 2, text: '📡 DRS zones enabled by FIA Race Control.', time: 'Lap 2' },
   ]);
 
-  // Load upcoming race metadata on mount
+  // Load upcoming race metadata from API on mount
   useEffect(() => {
     getF1NextRace()
       .then(({ data }) => {
-        if (data?.Circuit?.circuitId) {
-          setNextRaceData({
-            name: data.raceName,
-            date: data.date,
-            time: data.time,
-            circuitId: data.Circuit.circuitId,
-          });
-          const details = getCircuitDetails(data.Circuit.circuitId);
+        if (data?.name || data?.circuitName || data?.circuitId) {
+          const circuitKey = data.circuitId || data.circuitName || 'Zandvoort';
+          const details = getCircuitDetails(circuitKey);
+          setNextRaceData(data);
           setSelectedCircuitKey(details.file);
           setCircuitDetails(details);
           setTotalLaps(details.totalLaps);
@@ -98,12 +108,23 @@ const LiveRace = () => {
     toast.success(`Loaded ${details.name}`);
   };
 
+  // Handle overtakes on track
+  const handleOvertake = useCallback((overtaker, passedCar) => {
+    playPaddleShift(1.2);
+    const newEvent = {
+      id: `${Date.now()}-${overtaker.id}`,
+      text: `🏎️ ${overtaker.name} (${overtaker.code}) overtook ${passedCar.name} (${passedCar.code}) into the turn!`,
+      time: `Lap ${overtaker.lap || 1}`,
+    };
+    setRaceEvents((prev) => [newEvent, ...prev.slice(0, 14)]);
+  }, []);
+
   // Load selected historical GP replay data
   const handleSelectReplay = async (idx) => {
     playPaddleShift(1.1);
     setSelectedReplayIndex(idx);
     const replayInfo = HISTORICAL_REPLAYS[idx];
-    toast.loading(`Fetching official replay data for ${replayInfo.name}...`, { id: 'replay-load' });
+    toast.loading(`Fetching official session replay for ${replayInfo.name}...`, { id: 'replay-load' });
 
     const replayData = await loadHistoricalGPReplay(replayInfo.year, replayInfo.round);
     toast.dismiss('replay-load');
@@ -114,12 +135,10 @@ const LiveRace = () => {
       setReplayTimeline(replayData.lapsTimeline);
       setCurrentLap(1);
 
-      // Load circuit
       const details = getCircuitDetails(replayInfo.circuitKey);
       setSelectedCircuitKey(details.file);
       setCircuitDetails(details);
 
-      // Populate authentic overtakes commentary
       const overtakesList = [];
       replayData.lapsTimeline.forEach((lapItem) => {
         lapItem.overtakes.forEach((o) => {
@@ -188,7 +207,7 @@ const LiveRace = () => {
                 : activeMode === 'PRE_GRID'
                 ? 'PRE-GRID FORMATION'
                 : activeMode === 'COUNTDOWN'
-                ? 'PRE-RACE COUNTDOWN'
+                ? 'PRE-RACE WAITING ROOM'
                 : 'OFFICIAL GP REPLAY'}
             </span>
             <span className="text-gray-500 text-xs">·</span>
@@ -315,7 +334,7 @@ const LiveRace = () => {
               </div>
             )}
 
-            {/* Right: Circuit / Replay Selector */}
+            {/* Right: Calendar Circuit / Replay Selector */}
             <div className="flex items-center gap-2">
               {activeMode === 'GP_REPLAY' ? (
                 <select
@@ -335,7 +354,7 @@ const LiveRace = () => {
                   onChange={(e) => handleCircuitChange(e.target.value)}
                   className="bg-dark-900 border border-white/15 text-white text-xs font-mono px-3 py-1.5 rounded-xl focus:outline-none focus:border-amber-500 cursor-pointer shadow-lg"
                 >
-                  {AVAILABLE_CIRCUITS.map((c) => (
+                  {OFFICIAL_F1_CALENDAR.map((c) => (
                     <option key={c.key} value={c.key} className="bg-dark-900 text-white">
                       {c.name}
                     </option>
@@ -368,6 +387,7 @@ const LiveRace = () => {
                 simulationSpeed={simulationSpeed}
                 flagStatus={flagStatus}
                 viewMode={activeMode}
+                onOvertake={handleOvertake}
               />
 
               {/* Live Race Event Feed */}

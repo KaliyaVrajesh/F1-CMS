@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { playPaddleShift } from '../utils/audio';
 
@@ -12,18 +12,20 @@ const PreRaceCountdownView = ({
 }) => {
   const [timeLeft, setTimeLeft] = useState({
     days: 3,
-    hours: 14,
-    minutes: 28,
-    seconds: 45,
+    hours: 15,
+    minutes: 27,
+    seconds: 37,
   });
 
-  // Calculate live countdown to race date or mock target
+  // Calculate live countdown to actual target race date (Dutch Grand Prix on Aug 23, 2026)
   useEffect(() => {
-    const targetDate = nextRaceData?.date
-      ? new Date(`${nextRaceData.date}T${nextRaceData.time || '14:00:00Z'}`)
-      : new Date(Date.now() + (3 * 86400000 + 14 * 3600000 + 28 * 60000));
+    const targetDateString = nextRaceData?.date
+      ? `${nextRaceData.date}T${nextRaceData.time || '13:00:00Z'}`
+      : '2026-08-23T13:00:00Z';
 
-    const interval = setInterval(() => {
+    const targetDate = new Date(targetDateString);
+
+    const updateTimer = () => {
       const diff = targetDate.getTime() - Date.now();
       if (diff <= 0) {
         setTimeLeft({ days: 0, hours: 0, minutes: 0, seconds: 0 });
@@ -36,10 +38,46 @@ const PreRaceCountdownView = ({
       const seconds = Math.floor((diff % (1000 * 60)) / 1000);
 
       setTimeLeft({ days, hours, minutes, seconds });
-    }, 1000);
+    };
 
+    updateTimer();
+    const interval = setInterval(updateTimer, 1000);
     return () => clearInterval(interval);
   }, [nextRaceData]);
+
+  // Dynamic weekend timetable based on official race data
+  const scheduleSessions = useMemo(() => [
+    {
+      session: 'PRACTICE 1',
+      date: nextRaceData?.firstPractice?.date ? new Date(nextRaceData.firstPractice.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) : 'Fri, Aug 21',
+      time: nextRaceData?.firstPractice?.time ? `${nextRaceData.firstPractice.time.substring(0, 5)} UTC` : '10:30 UTC',
+      status: 'COMPLETED',
+    },
+    {
+      session: 'SPRINT / QUALIFYING',
+      date: nextRaceData?.sprintQualifying?.date ? new Date(nextRaceData.sprintQualifying.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) : 'Fri, Aug 21',
+      time: nextRaceData?.sprintQualifying?.time ? `${nextRaceData.sprintQualifying.time.substring(0, 5)} UTC` : '14:30 UTC',
+      status: 'COMPLETED',
+    },
+    {
+      session: 'SPRINT RACE',
+      date: nextRaceData?.sprint?.date ? new Date(nextRaceData.sprint.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) : 'Sat, Aug 22',
+      time: nextRaceData?.sprint?.time ? `${nextRaceData.sprint.time.substring(0, 5)} UTC` : '10:00 UTC',
+      status: 'COMPLETED',
+    },
+    {
+      session: 'QUALIFYING',
+      date: nextRaceData?.qualifying?.date ? new Date(nextRaceData.qualifying.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) : 'Sat, Aug 22',
+      time: nextRaceData?.qualifying?.time ? `${nextRaceData.qualifying.time.substring(0, 5)} UTC` : '14:00 UTC',
+      status: 'COMPLETED',
+    },
+    {
+      session: 'GRAND PRIX',
+      date: nextRaceData?.date ? new Date(nextRaceData.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) : 'Sun, Aug 23',
+      time: nextRaceData?.time ? `${nextRaceData.time.substring(0, 5)} UTC LIGHTS OUT` : '13:00 UTC LIGHTS OUT',
+      status: 'UPCOMING',
+    },
+  ], [nextRaceData]);
 
   return (
     <div className="w-full space-y-8">
@@ -59,12 +97,12 @@ const PreRaceCountdownView = ({
           </div>
 
           <div>
-            <span className="text-3xl sm:text-4xl">{circuitDetails?.flag || '🏁'}</span>
+            <span className="text-3xl sm:text-4xl">{circuitDetails?.flag || '🇳🇱'}</span>
             <h1 className="text-3xl sm:text-5xl font-f1heading font-black text-white uppercase tracking-wider mt-2">
-              {nextRaceData?.name || circuitDetails?.name || 'Upcoming Grand Prix'}
+              {nextRaceData?.name || circuitDetails?.name || 'Dutch Grand Prix'}
             </h1>
             <p className="text-sm font-mono text-gray-400 mt-1 uppercase">
-              {circuitDetails?.country} · {circuitDetails?.lapDistanceKm} KM · {circuitDetails?.totalLaps} LAPS
+              {circuitDetails?.country} · {circuitDetails?.name} · {circuitDetails?.lapDistanceKm} KM · {circuitDetails?.totalLaps} LAPS
             </p>
           </div>
 
@@ -135,18 +173,12 @@ const PreRaceCountdownView = ({
             <div className="flex items-center gap-2">
               <span className="text-lg">📅</span>
               <h3 className="text-sm font-mono font-black text-white uppercase tracking-widest">
-                GRAND PRIX SCHEDULE (LOCAL TIME)
+                OFFICIAL WEEKEND SCHEDULE
               </h3>
             </div>
 
             <div className="space-y-2 text-xs font-mono divide-y divide-white/5">
-              {[
-                { session: 'PRACTICE 1', date: 'Friday', time: '14:30 - 15:30', status: 'COMPLETED' },
-                { session: 'PRACTICE 2', date: 'Friday', time: '18:00 - 19:00', status: 'COMPLETED' },
-                { session: 'PRACTICE 3', date: 'Saturday', time: '15:00 - 16:00', status: 'COMPLETED' },
-                { session: 'QUALIFYING', date: 'Saturday', time: '18:00 - 19:00', status: 'COMPLETED' },
-                { session: 'GRAND PRIX', date: 'Sunday', time: '17:00 LIGHTS OUT', status: 'UPCOMING' },
-              ].map((s, idx) => (
+              {scheduleSessions.map((s, idx) => (
                 <div key={idx} className="pt-2 flex items-center justify-between">
                   <div>
                     <div className="font-bold text-white">{s.session}</div>
@@ -178,18 +210,18 @@ const PreRaceCountdownView = ({
             <div className="grid grid-cols-3 gap-3 text-center">
               <div className="p-3 rounded-2xl bg-white/5 border border-white/10">
                 <div className="text-[10px] font-mono text-gray-400 uppercase">AIR TEMP</div>
-                <div className="text-xl font-f1heading font-black text-white">28°C</div>
-                <div className="text-[9px] font-mono text-gray-500">SUNNY</div>
+                <div className="text-xl font-f1heading font-black text-white">22°C</div>
+                <div className="text-[9px] font-mono text-gray-500">COASTAL BREEZE</div>
               </div>
               <div className="p-3 rounded-2xl bg-white/5 border border-white/10">
                 <div className="text-[10px] font-mono text-gray-400 uppercase">TRACK TEMP</div>
-                <div className="text-xl font-f1heading font-black text-amber-400">38°C</div>
+                <div className="text-xl font-f1heading font-black text-amber-400">29°C</div>
                 <div className="text-[9px] font-mono text-gray-500">DRY ASPHALT</div>
               </div>
               <div className="p-3 rounded-2xl bg-white/5 border border-white/10">
                 <div className="text-[10px] font-mono text-gray-400 uppercase">RAIN RISK</div>
-                <div className="text-xl font-f1heading font-black text-green-400">0%</div>
-                <div className="text-[9px] font-mono text-gray-500">CLEAR SKY</div>
+                <div className="text-xl font-f1heading font-black text-green-400">10%</div>
+                <div className="text-[9px] font-mono text-gray-500">LOW CHANCE</div>
               </div>
             </div>
           </div>

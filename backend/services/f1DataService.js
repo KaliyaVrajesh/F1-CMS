@@ -249,6 +249,7 @@ async function getNextRace() {
     return {
       round:       parseInt(race.round, 10),
       name:        race.raceName,
+      circuitId:   race.Circuit.circuitId,
       circuitName: race.Circuit.circuitName,
       locality:    race.Circuit.Location.locality,
       country:     race.Circuit.Location.country,
@@ -256,8 +257,12 @@ async function getNextRace() {
       lng:         parseFloat(race.Circuit.Location.long),
       date:        race.date,
       time:        race.time || null,
-      qualifying:  race.Qualifying ? { date: race.Qualifying.date, time: race.Qualifying.time } : null,
+      firstPractice: race.FirstPractice ? { date: race.FirstPractice.date, time: race.FirstPractice.time } : null,
+      secondPractice: race.SecondPractice ? { date: race.SecondPractice.date, time: race.SecondPractice.time } : null,
+      thirdPractice: race.ThirdPractice ? { date: race.ThirdPractice.date, time: race.ThirdPractice.time } : null,
+      sprintQualifying: race.SprintQualifying ? { date: race.SprintQualifying.date, time: race.SprintQualifying.time } : null,
       sprint:      race.Sprint      ? { date: race.Sprint.date,     time: race.Sprint.time     } : null,
+      qualifying:  race.Qualifying ? { date: race.Qualifying.date, time: race.Qualifying.time } : null,
     };
   });
 }

@@ -2,6 +2,30 @@ import { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { playPaddleShift } from '../utils/audio';
 
+// Realistic driver performance rating modifiers
+const DRIVER_PACE_RATINGS = {
+  verstappen: 1.038,
+  norris:     1.035,
+  leclerc:    1.030,
+  hamilton:   1.028,
+  piastri:    1.025,
+  russell:    1.024,
+  antonelli:  1.018,
+  sainz:      1.016,
+  alonso:     1.015,
+  albon:      1.008,
+  gasly:      1.002,
+  lawson:     1.000,
+  tsunoda:    0.998,
+  hadjar:     0.995,
+  bearman:    0.992,
+  ocon:       0.990,
+  hulkenberg: 0.985,
+  stroll:     0.982,
+  bortoleto:  0.980,
+  doohan:     0.978,
+};
+
 const LiveTrackVisualizer = ({
   circuitDetails,
   drivers = [],
@@ -22,11 +46,12 @@ const LiveTrackVisualizer = ({
   const [zoomLevel, setZoomLevel] = useState(1.0);
   const [hoveredDriver, setHoveredDriver] = useState(null);
 
-  // Driver positions state (progress: 0.0 to 1.0, speed: km/h, lateralOffset: px)
+  // Driver states
   const driversStateRef = useRef([]);
   const [driverRenderPositions, setDriverRenderPositions] = useState([]);
   const lastFrameTimeRef = useRef(performance.now());
   const animFrameIdRef = useRef(null);
+  const lastOvertakeCheckRef = useRef(0);
 
   // Load Circuit SVG file
   useEffect(() => {
@@ -72,11 +97,9 @@ const LiveTrackVisualizer = ({
     if (drivers.length === 0) return;
 
     if (viewMode === 'PRE_GRID') {
-      // Station cars on staggered grid boxes behind start line
       const gridPositions = drivers.map((d, index) => {
-        // Grid spacing behind start line (progress: 0.94 to 0.99)
         const gridProgress = 0.985 - index * 0.016;
-        const sideOffset = index % 2 === 0 ? -7 : 7; // Staggered left/right grid slots
+        const sideOffset = index % 2 === 0 ? -7 : 7;
         return {
           id: d.id,
           code: d.code,
@@ -90,6 +113,8 @@ const LiveTrackVisualizer = ({
           lateralOffset: sideOffset,
           drsOpen: false,
           photo: d.photo,
+          tire: 'MEDIUM',
+          paceFactor: 1.0,
         };
       });
       driversStateRef.current = gridPositions;
@@ -98,7 +123,8 @@ const LiveTrackVisualizer = ({
 
     // Live Broadcast / Replay dynamic positioning
     const basePositions = drivers.map((d, index) => {
-      const initialProgress = (1.0 - index * 0.042) % 1.0;
+      const initialProgress = (1.0 - index * 0.038) % 1.0;
+      const pace = DRIVER_PACE_RATINGS[d.id] || (1.0 - index * 0.003);
       return {
         id: d.id,
         code: d.code,
@@ -107,11 +133,14 @@ const LiveTrackVisualizer = ({
         color: d.color,
         number: d.number,
         progress: (initialProgress + 1.0) % 1.0,
-        speed: 240 + Math.sin(index) * 20,
+        speed: 240,
         lap: 1,
         lateralOffset: 0,
         drsOpen: false,
         photo: d.photo,
+        tire: index % 3 === 0 ? 'SOFT' : index % 2 === 0 ? 'MEDIUM' : 'HARD',
+        paceFactor: pace,
+        isOvertaking: false,
       };
     });
 
@@ -120,20 +149,22 @@ const LiveTrackVisualizer = ({
 
   // Speed calculation heuristic based on track geometry & DRS zones
   const calculateSpeedAtProgress = useCallback(
-    (progress, drsZones = []) => {
+    (progress, drsZones = [], isDrsActive = false) => {
       const inDrs = drsZones.some((z) => progress >= z.start && progress <= z.end);
-      if (inDrs) return { speed: 328, isDrs: true };
+      if (inDrs) {
+        return { speed: isDrsActive ? 342 : 325, isDrs: true };
+      }
 
       const turnMilestones = circuitDetails?.turnMilestones || [];
       const nearTurn = turnMilestones.some((t) => Math.abs(progress - t.pos) < 0.025);
-      if (nearTurn) return { speed: 105, isDrs: false };
+      if (nearTurn) return { speed: 98, isDrs: false };
 
-      return { speed: 250 + Math.sin(progress * Math.PI * 8) * 35, isDrs: false };
+      return { speed: 255 + Math.sin(progress * Math.PI * 8) * 35, isDrs: false };
     },
     [circuitDetails]
   );
 
-  // 60FPS Physics & Rendering Loop
+  // 60FPS Physics & Dynamic Overtaking Loop
   useEffect(() => {
     if (!pathRef.current || trackLength === 0) return;
 
@@ -148,18 +179,35 @@ const LiveTrackVisualizer = ({
         const state = driversStateRef.current;
         const count = state.length;
 
-        let paceModifier = simulationSpeed * 0.045;
+        let paceModifier = simulationSpeed * 0.048;
         if (flagStatus === 'SC') paceModifier *= 0.45;
         if (flagStatus === 'VSC') paceModifier *= 0.60;
         if (flagStatus === 'YELLOW') paceModifier *= 0.80;
 
+        // Check slipstreaming, DRS activation, and overtakes
         for (let i = 0; i < count; i++) {
           const car = state[i];
-          const { speed, isDrs } = calculateSpeedAtProgress(car.progress, drsZones);
-          car.speed = speed;
+          let hasDrsBoost = false;
+
+          // Look for car ahead within DRS detection range (0.015 to 0.035 progress)
+          for (let j = 0; j < count; j++) {
+            if (i !== j) {
+              const diff = (state[j].progress - car.progress + 1.0) % 1.0;
+              if (diff > 0.005 && diff < 0.032) {
+                // Within DRS range!
+                hasDrsBoost = true;
+                break;
+              }
+            }
+          }
+
+          const { speed, isDrs } = calculateSpeedAtProgress(car.progress, drsZones, hasDrsBoost);
+          const dynamicSpeed = speed * (car.paceFactor || 1.0);
+          car.speed = dynamicSpeed;
           car.drsOpen = isDrs && flagStatus === 'GREEN';
 
-          const deltaProgress = (speed / 300) * paceModifier * dt;
+          // Move car forward on track
+          const deltaProgress = (dynamicSpeed / 300) * paceModifier * dt;
           const prevProg = car.progress;
           car.progress = (car.progress + deltaProgress) % 1.0;
 
@@ -179,7 +227,30 @@ const LiveTrackVisualizer = ({
               }
             }
           }
-          state[i].lateralOffset = overlapCount * 12;
+          state[i].lateralOffset = overlapCount * 13;
+        }
+
+        // Check overtakes periodically (every 500ms)
+        if (now - lastOvertakeCheckRef.current > 500) {
+          lastOvertakeCheckRef.current = now;
+          for (let i = 0; i < count; i++) {
+            for (let j = i + 1; j < count; j++) {
+              const carA = state[i];
+              const carB = state[j];
+              // If Car A (behind) just passed Car B
+              if (
+                carA.paceFactor > carB.paceFactor &&
+                Math.abs(carA.progress - carB.progress) < 0.012 &&
+                !carA.isOvertaking
+              ) {
+                carA.isOvertaking = true;
+                setTimeout(() => {
+                  carA.isOvertaking = false;
+                }, 4000);
+                onOvertake(carA, carB);
+              }
+            }
+          }
         }
       }
 
@@ -214,7 +285,7 @@ const LiveTrackVisualizer = ({
     return () => {
       if (animFrameIdRef.current) cancelAnimationFrame(animFrameIdRef.current);
     };
-  }, [trackLength, isPlaying, simulationSpeed, flagStatus, calculateSpeedAtProgress, circuitDetails, viewMode]);
+  }, [trackLength, isPlaying, simulationSpeed, flagStatus, calculateSpeedAtProgress, circuitDetails, viewMode, onOvertake]);
 
   // Compute Turn corner (x, y) coordinates for pill badges
   const turnMarkers = useMemo(() => {
@@ -328,7 +399,6 @@ const LiveTrackVisualizer = ({
           style={{ filter: 'drop-shadow(0 0 20px rgba(0,0,0,0.8))' }}
         >
           <defs>
-            {/* Checkered flag banner pattern */}
             <pattern id="checkered-flag" width="6" height="6" patternUnits="userSpaceOnUse">
               <rect width="3" height="3" fill="#FFFFFF" />
               <rect x="3" width="3" height="3" fill="#000000" />
@@ -336,14 +406,13 @@ const LiveTrackVisualizer = ({
               <rect x="3" y="3" width="3" height="3" fill="#FFFFFF" />
             </pattern>
 
-            {/* Glowing filter for DRS zones */}
             <filter id="drs-glow" x="-20%" y="-20%" width="140%" height="140%">
               <feGaussianBlur stdDeviation="3" result="blur" />
               <feComposite in="SourceGraphic" in2="blur" operator="over" />
             </filter>
           </defs>
 
-          {/* Reference Hidden Path used for length and point calculations */}
+          {/* Reference Hidden Path */}
           {svgPathD && (
             <path
               ref={pathRef}
@@ -431,7 +500,7 @@ const LiveTrackVisualizer = ({
             </g>
           )}
 
-          {/* Turn Number Badges (As shown in Reference Image) */}
+          {/* Turn Number Badges */}
           {turnMarkers.map((m) => (
             <g key={m.turn} transform={`translate(${m.x}, ${m.y})`}>
               <circle
