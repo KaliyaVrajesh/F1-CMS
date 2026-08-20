@@ -25,7 +25,6 @@ export const DEFAULT_DRIVERS = [
   { id: 'bortoleto',   code: 'BOR', name: 'Gabriel Bortoleto',     number: 5,  team: 'Kick Sauber',    color: '#52E252', photo: '/images/drivers/gabriel_bortoleto.jpg' },
   { id: 'stroll',      code: 'STR', name: 'Lance Stroll',          number: 18, team: 'Aston Martin',   color: '#229971', photo: '/images/drivers/lance_stroll.jpg' },
 ];
-
 export const CIRCUIT_DETAILS = {
   silverstone: {
     name: 'Silverstone Circuit',
@@ -34,12 +33,9 @@ export const CIRCUIT_DETAILS = {
     flag: '🇬🇧',
     totalLaps: 52,
     lapDistanceKm: 5.891,
-    averageLapTimeSec: 89.2, // ~1:29.200 authentic race pace
+    averageLapTimeSec: 89.2,
     turnsCount: 18,
-    drsZones: [
-      { start: 0.23, end: 0.37, label: 'DRS 1 (Wellington Straight)' },
-      { start: 0.64, end: 0.81, label: 'DRS 2 (Hangar Straight)' },
-    ],
+    reversePath: false,
     turnMilestones: [
       { turn: 1, pos: 0.10 },
       { turn: 3, pos: 0.22 },
@@ -57,12 +53,9 @@ export const CIRCUIT_DETAILS = {
     flag: '🇳🇱',
     totalLaps: 72,
     lapDistanceKm: 4.259,
-    averageLapTimeSec: 72.8, // ~1:12.800 authentic race pace
+    averageLapTimeSec: 72.8,
     turnsCount: 14,
-    drsZones: [
-      { start: 0.92, end: 0.08, label: 'DRS 1 (Pit Straight)' },
-      { start: 0.48, end: 0.60, label: 'DRS 2' },
-    ],
+    reversePath: true, // SVG spline drawn counter-clockwise -> reverse so cars travel forward
     turnMilestones: [
       { turn: 1, pos: 0.12 },
       { turn: 3, pos: 0.28 },
@@ -78,12 +71,9 @@ export const CIRCUIT_DETAILS = {
     flag: '🇮🇹',
     totalLaps: 53,
     lapDistanceKm: 5.793,
-    averageLapTimeSec: 81.5, // ~1:21.500
+    averageLapTimeSec: 81.5,
     turnsCount: 11,
-    drsZones: [
-      { start: 0.90, end: 0.10, label: 'DRS 1 (Main Straight)' },
-      { start: 0.52, end: 0.68, label: 'DRS 2 (Serraglio)' },
-    ],
+    reversePath: false,
     turnMilestones: [
       { turn: 1, pos: 0.16 },
       { turn: 4, pos: 0.38 },
@@ -99,12 +89,9 @@ export const CIRCUIT_DETAILS = {
     flag: '🇧🇪',
     totalLaps: 44,
     lapDistanceKm: 7.004,
-    averageLapTimeSec: 106.5, // ~1:46.500
+    averageLapTimeSec: 106.5,
     turnsCount: 19,
-    drsZones: [
-      { start: 0.16, end: 0.35, label: 'DRS 1 (Kemmel Straight)' },
-      { start: 0.92, end: 0.05, label: 'DRS 2 (Pit Straight)' },
-    ],
+    reversePath: false,
     turnMilestones: [
       { turn: 1, pos: 0.08 },
       { turn: 3, pos: 0.18 },
@@ -122,9 +109,9 @@ export const CIRCUIT_DETAILS = {
     flag: '🇲🇨',
     totalLaps: 78,
     lapDistanceKm: 3.337,
-    averageLapTimeSec: 74.5, // ~1:14.500
+    averageLapTimeSec: 74.5,
     turnsCount: 19,
-    drsZones: [{ start: 0.92, end: 0.08, label: 'DRS 1 (Pit Straight)' }],
+    reversePath: false,
     turnMilestones: [
       { turn: 1, pos: 0.12 },
       { turn: 3, pos: 0.25 },
@@ -142,13 +129,9 @@ export const CIRCUIT_DETAILS = {
     flag: '🇧🇭',
     totalLaps: 57,
     lapDistanceKm: 5.412,
-    averageLapTimeSec: 93.0, // ~1:33.000
+    averageLapTimeSec: 93.0,
     turnsCount: 15,
-    drsZones: [
-      { start: 0.90, end: 0.08, label: 'DRS 1 (Main Straight)' },
-      { start: 0.18, end: 0.28, label: 'DRS 2' },
-      { start: 0.54, end: 0.66, label: 'DRS 3' },
-    ],
+    reversePath: false,
     turnMilestones: [
       { turn: 1, pos: 0.17 },
       { turn: 2, pos: 0.20 },
@@ -176,11 +159,7 @@ export const CIRCUIT_DETAILS = {
     lapDistanceKm: 6.174,
     averageLapTimeSec: 90.5,
     turnsCount: 27,
-    drsZones: [
-      { start: 0.92, end: 0.06, label: 'DRS 1 (Main Straight)' },
-      { start: 0.55, end: 0.70, label: 'DRS 2' },
-      { start: 0.82, end: 0.92, label: 'DRS 3' },
-    ],
+    reversePath: true,
     turnMilestones: [
       { turn: 1, pos: 0.08 },
       { turn: 2, pos: 0.11 },
@@ -201,12 +180,7 @@ export const CIRCUIT_DETAILS = {
     lapDistanceKm: 5.278,
     averageLapTimeSec: 79.5,
     turnsCount: 14,
-    drsZones: [
-      { start: 0.92, end: 0.06, label: 'DRS 1 (Main Straight)' },
-      { start: 0.12, end: 0.22, label: 'DRS 2' },
-      { start: 0.44, end: 0.58, label: 'DRS 3' },
-      { start: 0.62, end: 0.72, label: 'DRS 4' },
-    ],
+    reversePath: false,
     turnMilestones: [
       { turn: 1, pos: 0.14 },
       { turn: 2, pos: 0.18 },
@@ -233,7 +207,7 @@ export const CIRCUIT_DETAILS = {
     lapDistanceKm: 5.807,
     averageLapTimeSec: 91.5,
     turnsCount: 18,
-    drsZones: [{ start: 0.90, end: 0.06, label: 'DRS 1 (Main Straight)' }],
+    reversePath: false,
     turnMilestones: [
       { turn: 1, pos: 0.12 },
       { turn: 2, pos: 0.16 },
@@ -255,10 +229,7 @@ export const CIRCUIT_DETAILS = {
     lapDistanceKm: 5.451,
     averageLapTimeSec: 95.0,
     turnsCount: 16,
-    drsZones: [
-      { start: 0.92, end: 0.06, label: 'DRS 1 (Main Straight)' },
-      { start: 0.64, end: 0.86, label: 'DRS 2 (Back Straight)' },
-    ],
+    reversePath: false,
     turnMilestones: [
       { turn: 1, pos: 0.14 },
       { turn: 6, pos: 0.38 },
@@ -277,11 +248,7 @@ export const CIRCUIT_DETAILS = {
     lapDistanceKm: 5.412,
     averageLapTimeSec: 90.0,
     turnsCount: 19,
-    drsZones: [
-      { start: 0.92, end: 0.06, label: 'DRS 1 (Main Straight)' },
-      { start: 0.34, end: 0.48, label: 'DRS 2' },
-      { start: 0.70, end: 0.88, label: 'DRS 3 (Back Straight)' },
-    ],
+    reversePath: true,
     turnMilestones: [
       { turn: 1, pos: 0.12 },
       { turn: 7, pos: 0.38 },
@@ -299,7 +266,7 @@ export const CIRCUIT_DETAILS = {
     lapDistanceKm: 4.909,
     averageLapTimeSec: 77.0,
     turnsCount: 19,
-    drsZones: [{ start: 0.90, end: 0.10, label: 'DRS 1 (Main Straight)' }],
+    reversePath: true,
     turnMilestones: [
       { turn: 2, pos: 0.18 },
       { turn: 5, pos: 0.35 },
@@ -318,10 +285,7 @@ export const CIRCUIT_DETAILS = {
     lapDistanceKm: 4.361,
     averageLapTimeSec: 74.0,
     turnsCount: 14,
-    drsZones: [
-      { start: 0.70, end: 0.88, label: 'DRS 1 (Casino Straight)' },
-      { start: 0.92, end: 0.06, label: 'DRS 2 (Pit Straight)' },
-    ],
+    reversePath: false,
     turnMilestones: [
       { turn: 1, pos: 0.14 },
       { turn: 6, pos: 0.40 },
@@ -339,10 +303,7 @@ export const CIRCUIT_DETAILS = {
     lapDistanceKm: 4.657,
     averageLapTimeSec: 76.5,
     turnsCount: 14,
-    drsZones: [
-      { start: 0.90, end: 0.06, label: 'DRS 1 (Main Straight)' },
-      { start: 0.54, end: 0.68, label: 'DRS 2' },
-    ],
+    reversePath: false,
     turnMilestones: [
       { turn: 1, pos: 0.15 },
       { turn: 4, pos: 0.35 },
@@ -360,11 +321,7 @@ export const CIRCUIT_DETAILS = {
     lapDistanceKm: 4.318,
     averageLapTimeSec: 67.5,
     turnsCount: 10,
-    drsZones: [
-      { start: 0.90, end: 0.06, label: 'DRS 1 (Main Straight)' },
-      { start: 0.10, end: 0.28, label: 'DRS 2 (Uphill)' },
-      { start: 0.32, end: 0.48, label: 'DRS 3 (Downhill)' },
-    ],
+    reversePath: false,
     turnMilestones: [
       { turn: 1, pos: 0.15 },
       { turn: 3, pos: 0.38 },
@@ -383,10 +340,7 @@ export const CIRCUIT_DETAILS = {
     lapDistanceKm: 4.381,
     averageLapTimeSec: 78.0,
     turnsCount: 14,
-    drsZones: [
-      { start: 0.90, end: 0.06, label: 'DRS 1 (Main Straight)' },
-      { start: 0.08, end: 0.18, label: 'DRS 2' },
-    ],
+    reversePath: false,
     turnMilestones: [
       { turn: 1, pos: 0.16 },
       { turn: 4, pos: 0.36 },
@@ -404,10 +358,7 @@ export const CIRCUIT_DETAILS = {
     lapDistanceKm: 6.003,
     averageLapTimeSec: 104.0,
     turnsCount: 20,
-    drsZones: [
-      { start: 0.74, end: 0.06, label: 'DRS 1 (2.2km Straight)' },
-      { start: 0.12, end: 0.22, label: 'DRS 2' },
-    ],
+    reversePath: true,
     turnMilestones: [
       { turn: 1, pos: 0.18 },
       { turn: 5, pos: 0.38 },
@@ -425,11 +376,7 @@ export const CIRCUIT_DETAILS = {
     lapDistanceKm: 4.940,
     averageLapTimeSec: 96.0,
     turnsCount: 19,
-    drsZones: [
-      { start: 0.92, end: 0.05, label: 'DRS 1 (Main Straight)' },
-      { start: 0.30, end: 0.45, label: 'DRS 2 (Raffles Ave)' },
-      { start: 0.68, end: 0.78, label: 'DRS 3' },
-    ],
+    reversePath: true,
     turnMilestones: [
       { turn: 1, pos: 0.12 },
       { turn: 5, pos: 0.32 },
@@ -447,10 +394,7 @@ export const CIRCUIT_DETAILS = {
     lapDistanceKm: 5.513,
     averageLapTimeSec: 97.0,
     turnsCount: 20,
-    drsZones: [
-      { start: 0.92, end: 0.05, label: 'DRS 1 (Main Straight)' },
-      { start: 0.50, end: 0.68, label: 'DRS 2 (Back Straight)' },
-    ],
+    reversePath: true,
     turnMilestones: [
       { turn: 1, pos: 0.14 },
       { turn: 6, pos: 0.38 },
@@ -468,11 +412,7 @@ export const CIRCUIT_DETAILS = {
     lapDistanceKm: 4.304,
     averageLapTimeSec: 79.5,
     turnsCount: 17,
-    drsZones: [
-      { start: 0.88, end: 0.08, label: 'DRS 1 (Main Straight)' },
-      { start: 0.22, end: 0.35, label: 'DRS 2' },
-      { start: 0.60, end: 0.72, label: 'DRS 3' },
-    ],
+    reversePath: false,
     turnMilestones: [
       { turn: 1, pos: 0.18 },
       { turn: 4, pos: 0.38 },
@@ -490,10 +430,7 @@ export const CIRCUIT_DETAILS = {
     lapDistanceKm: 4.309,
     averageLapTimeSec: 71.5,
     turnsCount: 15,
-    drsZones: [
-      { start: 0.18, end: 0.32, label: 'DRS 1 (Reta Oposta)' },
-      { start: 0.84, end: 0.04, label: 'DRS 2 (Main Straight)' },
-    ],
+    reversePath: true,
     turnMilestones: [
       { turn: 1, pos: 0.16 },
       { turn: 4, pos: 0.36 },
@@ -511,10 +448,7 @@ export const CIRCUIT_DETAILS = {
     lapDistanceKm: 6.201,
     averageLapTimeSec: 94.5,
     turnsCount: 17,
-    drsZones: [
-      { start: 0.18, end: 0.30, label: 'DRS 1 (Koval Lane)' },
-      { start: 0.60, end: 0.86, label: 'DRS 2 (Strip Straight)' },
-    ],
+    reversePath: true,
     turnMilestones: [
       { turn: 1, pos: 0.14 },
       { turn: 5, pos: 0.35 },
@@ -532,7 +466,7 @@ export const CIRCUIT_DETAILS = {
     lapDistanceKm: 5.419,
     averageLapTimeSec: 84.0,
     turnsCount: 16,
-    drsZones: [{ start: 0.90, end: 0.06, label: 'DRS 1 (Main Straight)' }],
+    reversePath: false,
     turnMilestones: [
       { turn: 1, pos: 0.16 },
       { turn: 6, pos: 0.42 },
@@ -548,12 +482,9 @@ export const CIRCUIT_DETAILS = {
     flag: '🇦🇪',
     totalLaps: 58,
     lapDistanceKm: 5.281,
-    averageLapTimeSec: 87.0, // ~1:27.000
+    averageLapTimeSec: 87.0,
     turnsCount: 16,
-    drsZones: [
-      { start: 0.28, end: 0.46, label: 'DRS 1 (Back Straight)' },
-      { start: 0.50, end: 0.66, label: 'DRS 2' },
-    ],
+    reversePath: false,
     turnMilestones: [
       { turn: 1, pos: 0.12 },
       { turn: 5, pos: 0.28 },

@@ -529,7 +529,11 @@ const LiveTrackVisualizer = ({
 
       // Compute exact (x, y) coordinates with pit lane normal offsets
       const computedRenderPositions = driversStateRef.current.map((car) => {
-        const currentDist = car.progress * trackLength;
+        const rawProg = car.progress !== undefined ? car.progress : 0;
+        const effectiveProgress = circuitDetails?.reversePath
+          ? (1.0 - (rawProg % 1.0)) % 1.0
+          : (rawProg % 1.0);
+        const currentDist = effectiveProgress * trackLength;
         const norm = getInfieldNormal(currentDist, svgPath, trackLength, circuitCentroid);
         const offset = car.pitLaneOffset || 0;
 
@@ -757,69 +761,9 @@ const LiveTrackVisualizer = ({
                 strokeWidth="1.2"
                 strokeDasharray="2 3"
                 strokeLinecap="round"
-                opacity="0.85"
               />
             </g>
           )}
-
-          {/* DRS Zones Glowing Overlays (Authentic FIA Straights) */}
-          {trackLength > 0 &&
-            circuitDetails?.drsZones?.map((z, idx) => {
-              const isWrap = z.end < z.start;
-
-              if (isWrap) {
-                // Zone wraps across Start/Finish straight (e.g. 0.90 -> 0.08)
-                const seg1Start = z.start * trackLength;
-                const seg1Len = (1.0 - z.start) * trackLength;
-                const seg2Len = z.end * trackLength;
-
-                return (
-                  <g key={idx}>
-                    {/* Segment 1: z.start -> 1.0 */}
-                    <path
-                      d={svgPathD}
-                      fill="none"
-                      stroke="#00E676"
-                      strokeWidth="12"
-                      strokeDasharray={`${seg1Len} ${trackLength}`}
-                      strokeDashoffset={-seg1Start}
-                      strokeLinecap="round"
-                      opacity="0.8"
-                      filter="url(#drs-glow)"
-                    />
-                    {/* Segment 2: 0.0 -> z.end */}
-                    <path
-                      d={svgPathD}
-                      fill="none"
-                      stroke="#00E676"
-                      strokeWidth="12"
-                      strokeDasharray={`${seg2Len} ${trackLength}`}
-                      strokeDashoffset={0}
-                      strokeLinecap="round"
-                      opacity="0.8"
-                      filter="url(#drs-glow)"
-                    />
-                  </g>
-                );
-              } else {
-                const startOffset = z.start * trackLength;
-                const zoneLength = (z.end - z.start) * trackLength;
-                return (
-                  <path
-                    key={idx}
-                    d={svgPathD}
-                    fill="none"
-                    stroke="#00E676"
-                    strokeWidth="12"
-                    strokeDasharray={`${zoneLength} ${trackLength}`}
-                    strokeDashoffset={-startOffset}
-                    strokeLinecap="round"
-                    opacity="0.8"
-                    filter="url(#drs-glow)"
-                  />
-                );
-              }
-            })}
 
           {/* Start/Finish Line Checkered Flag */}
           {startFinishCoords && (
