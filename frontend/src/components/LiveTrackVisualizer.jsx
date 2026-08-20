@@ -227,7 +227,13 @@ const LiveTrackVisualizer = ({
   // Speed calculation based on track curvature & DRS zones
   const calculateSpeedAtProgress = useCallback(
     (progress, drsZones = [], isDrsActive = false) => {
-      const inDrs = drsZones.some((z) => progress >= z.start && progress <= z.end);
+      const inDrs = drsZones.some((z) => {
+        if (z.end < z.start) {
+          return progress >= z.start || progress <= z.end;
+        }
+        return progress >= z.start && progress <= z.end;
+      });
+
       if (inDrs) {
         return { speed: isDrsActive ? 342 : 325, isDrs: true };
       }
@@ -756,25 +762,63 @@ const LiveTrackVisualizer = ({
             </g>
           )}
 
-          {/* DRS Zones Orange Highlights */}
+          {/* DRS Zones Glowing Overlays (Authentic FIA Straights) */}
           {trackLength > 0 &&
             circuitDetails?.drsZones?.map((z, idx) => {
-              const startOffset = z.start * trackLength;
-              const zoneLength = (z.end - z.start) * trackLength;
-              return (
-                <path
-                  key={idx}
-                  d={svgPathD}
-                  fill="none"
-                  stroke="#FF8000"
-                  strokeWidth="14"
-                  strokeDasharray={`${zoneLength} ${trackLength}`}
-                  strokeDashoffset={-startOffset}
-                  strokeLinecap="round"
-                  opacity="0.75"
-                  filter="url(#drs-glow)"
-                />
-              );
+              const isWrap = z.end < z.start;
+
+              if (isWrap) {
+                // Zone wraps across Start/Finish straight (e.g. 0.90 -> 0.08)
+                const seg1Start = z.start * trackLength;
+                const seg1Len = (1.0 - z.start) * trackLength;
+                const seg2Len = z.end * trackLength;
+
+                return (
+                  <g key={idx}>
+                    {/* Segment 1: z.start -> 1.0 */}
+                    <path
+                      d={svgPathD}
+                      fill="none"
+                      stroke="#00E676"
+                      strokeWidth="12"
+                      strokeDasharray={`${seg1Len} ${trackLength}`}
+                      strokeDashoffset={-seg1Start}
+                      strokeLinecap="round"
+                      opacity="0.8"
+                      filter="url(#drs-glow)"
+                    />
+                    {/* Segment 2: 0.0 -> z.end */}
+                    <path
+                      d={svgPathD}
+                      fill="none"
+                      stroke="#00E676"
+                      strokeWidth="12"
+                      strokeDasharray={`${seg2Len} ${trackLength}`}
+                      strokeDashoffset={0}
+                      strokeLinecap="round"
+                      opacity="0.8"
+                      filter="url(#drs-glow)"
+                    />
+                  </g>
+                );
+              } else {
+                const startOffset = z.start * trackLength;
+                const zoneLength = (z.end - z.start) * trackLength;
+                return (
+                  <path
+                    key={idx}
+                    d={svgPathD}
+                    fill="none"
+                    stroke="#00E676"
+                    strokeWidth="12"
+                    strokeDasharray={`${zoneLength} ${trackLength}`}
+                    strokeDashoffset={-startOffset}
+                    strokeLinecap="round"
+                    opacity="0.8"
+                    filter="url(#drs-glow)"
+                  />
+                );
+              }
             })}
 
           {/* Start/Finish Line Checkered Flag */}

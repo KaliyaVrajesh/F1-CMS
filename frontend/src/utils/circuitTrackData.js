@@ -37,8 +37,8 @@ export const CIRCUIT_DETAILS = {
     averageLapTimeSec: 89.2, // ~1:29.200 authentic race pace
     turnsCount: 18,
     drsZones: [
-      { start: 0.28, end: 0.42, label: 'DRS 1' },
-      { start: 0.62, end: 0.78, label: 'DRS 2' },
+      { start: 0.23, end: 0.37, label: 'DRS 1 (Wellington Straight)' },
+      { start: 0.64, end: 0.81, label: 'DRS 2 (Hangar Straight)' },
     ],
     turnMilestones: [
       { turn: 1, pos: 0.10 },
@@ -60,8 +60,8 @@ export const CIRCUIT_DETAILS = {
     averageLapTimeSec: 72.8, // ~1:12.800 authentic race pace
     turnsCount: 14,
     drsZones: [
-      { start: 0.02, end: 0.14, label: 'DRS 1' },
-      { start: 0.58, end: 0.72, label: 'DRS 2' },
+      { start: 0.92, end: 0.08, label: 'DRS 1 (Pit Straight)' },
+      { start: 0.48, end: 0.60, label: 'DRS 2' },
     ],
     turnMilestones: [
       { turn: 1, pos: 0.12 },
@@ -81,8 +81,8 @@ export const CIRCUIT_DETAILS = {
     averageLapTimeSec: 81.5, // ~1:21.500
     turnsCount: 11,
     drsZones: [
-      { start: 0.03, end: 0.18, label: 'DRS 1' },
-      { start: 0.48, end: 0.68, label: 'DRS 2' },
+      { start: 0.90, end: 0.10, label: 'DRS 1 (Main Straight)' },
+      { start: 0.52, end: 0.68, label: 'DRS 2 (Serraglio)' },
     ],
     turnMilestones: [
       { turn: 1, pos: 0.16 },
@@ -102,8 +102,8 @@ export const CIRCUIT_DETAILS = {
     averageLapTimeSec: 106.5, // ~1:46.500
     turnsCount: 19,
     drsZones: [
-      { start: 0.02, end: 0.12, label: 'DRS 1' },
-      { start: 0.25, end: 0.44, label: 'DRS 2' },
+      { start: 0.16, end: 0.35, label: 'DRS 1 (Kemmel Straight)' },
+      { start: 0.92, end: 0.05, label: 'DRS 2 (Pit Straight)' },
     ],
     turnMilestones: [
       { turn: 1, pos: 0.08 },
@@ -124,7 +124,7 @@ export const CIRCUIT_DETAILS = {
     lapDistanceKm: 3.337,
     averageLapTimeSec: 74.5, // ~1:14.500
     turnsCount: 19,
-    drsZones: [{ start: 0.02, end: 0.14, label: 'DRS 1' }],
+    drsZones: [{ start: 0.92, end: 0.08, label: 'DRS 1 (Pit Straight)' }],
     turnMilestones: [
       { turn: 1, pos: 0.12 },
       { turn: 3, pos: 0.25 },
@@ -145,9 +145,9 @@ export const CIRCUIT_DETAILS = {
     averageLapTimeSec: 93.0, // ~1:33.000
     turnsCount: 15,
     drsZones: [
-      { start: 0.02, end: 0.16, label: 'DRS 1' },
-      { start: 0.42, end: 0.54, label: 'DRS 2' },
-      { start: 0.88, end: 0.98, label: 'DRS 3' },
+      { start: 0.90, end: 0.08, label: 'DRS 1 (Main Straight)' },
+      { start: 0.18, end: 0.28, label: 'DRS 2' },
+      { start: 0.54, end: 0.66, label: 'DRS 3' },
     ],
     turnMilestones: [
       { turn: 1, pos: 0.17 },
@@ -177,9 +177,9 @@ export const CIRCUIT_DETAILS = {
     averageLapTimeSec: 90.5,
     turnsCount: 27,
     drsZones: [
-      { start: 0.05, end: 0.20, label: 'DRS 1' },
-      { start: 0.55, end: 0.72, label: 'DRS 2' },
-      { start: 0.85, end: 0.96, label: 'DRS 3' },
+      { start: 0.92, end: 0.06, label: 'DRS 1 (Main Straight)' },
+      { start: 0.55, end: 0.70, label: 'DRS 2' },
+      { start: 0.82, end: 0.92, label: 'DRS 3' },
     ],
     turnMilestones: [
       { turn: 1, pos: 0.08 },
@@ -202,9 +202,10 @@ export const CIRCUIT_DETAILS = {
     averageLapTimeSec: 79.5,
     turnsCount: 14,
     drsZones: [
-      { start: 0.03, end: 0.17, label: 'DRS 1' },
-      { start: 0.45, end: 0.60, label: 'DRS 2' },
-      { start: 0.85, end: 0.98, label: 'DRS 3' },
+      { start: 0.92, end: 0.06, label: 'DRS 1 (Main Straight)' },
+      { start: 0.12, end: 0.22, label: 'DRS 2' },
+      { start: 0.44, end: 0.58, label: 'DRS 3' },
+      { start: 0.62, end: 0.72, label: 'DRS 4' },
     ],
     turnMilestones: [
       { turn: 1, pos: 0.14 },
@@ -232,7 +233,7 @@ export const CIRCUIT_DETAILS = {
     lapDistanceKm: 5.807,
     averageLapTimeSec: 91.5,
     turnsCount: 18,
-    drsZones: [{ start: 0.02, end: 0.15, label: 'DRS 1' }],
+    drsZones: [{ start: 0.90, end: 0.06, label: 'DRS 1 (Main Straight)' }],
     turnMilestones: [
       { turn: 1, pos: 0.12 },
       { turn: 2, pos: 0.16 },
@@ -255,8 +256,8 @@ export const CIRCUIT_DETAILS = {
     averageLapTimeSec: 95.0,
     turnsCount: 16,
     drsZones: [
-      { start: 0.04, end: 0.16, label: 'DRS 1' },
-      { start: 0.66, end: 0.88, label: 'DRS 2' },
+      { start: 0.92, end: 0.06, label: 'DRS 1 (Main Straight)' },
+      { start: 0.64, end: 0.86, label: 'DRS 2 (Back Straight)' },
     ],
     turnMilestones: [
       { turn: 1, pos: 0.14 },
@@ -277,9 +278,9 @@ export const CIRCUIT_DETAILS = {
     averageLapTimeSec: 90.0,
     turnsCount: 19,
     drsZones: [
-      { start: 0.02, end: 0.15, label: 'DRS 1' },
-      { start: 0.45, end: 0.62, label: 'DRS 2' },
-      { start: 0.78, end: 0.95, label: 'DRS 3' },
+      { start: 0.92, end: 0.06, label: 'DRS 1 (Main Straight)' },
+      { start: 0.34, end: 0.48, label: 'DRS 2' },
+      { start: 0.70, end: 0.88, label: 'DRS 3 (Back Straight)' },
     ],
     turnMilestones: [
       { turn: 1, pos: 0.12 },
@@ -298,7 +299,7 @@ export const CIRCUIT_DETAILS = {
     lapDistanceKm: 4.909,
     averageLapTimeSec: 77.0,
     turnsCount: 19,
-    drsZones: [{ start: 0.03, end: 0.16, label: 'DRS 1' }],
+    drsZones: [{ start: 0.90, end: 0.10, label: 'DRS 1 (Main Straight)' }],
     turnMilestones: [
       { turn: 2, pos: 0.18 },
       { turn: 5, pos: 0.35 },
@@ -318,8 +319,8 @@ export const CIRCUIT_DETAILS = {
     averageLapTimeSec: 74.0,
     turnsCount: 14,
     drsZones: [
-      { start: 0.04, end: 0.18, label: 'DRS 1' },
-      { start: 0.72, end: 0.90, label: 'DRS 2' },
+      { start: 0.70, end: 0.88, label: 'DRS 1 (Casino Straight)' },
+      { start: 0.92, end: 0.06, label: 'DRS 2 (Pit Straight)' },
     ],
     turnMilestones: [
       { turn: 1, pos: 0.14 },
@@ -339,8 +340,8 @@ export const CIRCUIT_DETAILS = {
     averageLapTimeSec: 76.5,
     turnsCount: 14,
     drsZones: [
-      { start: 0.03, end: 0.18, label: 'DRS 1' },
-      { start: 0.55, end: 0.68, label: 'DRS 2' },
+      { start: 0.90, end: 0.06, label: 'DRS 1 (Main Straight)' },
+      { start: 0.54, end: 0.68, label: 'DRS 2' },
     ],
     turnMilestones: [
       { turn: 1, pos: 0.15 },
@@ -360,9 +361,9 @@ export const CIRCUIT_DETAILS = {
     averageLapTimeSec: 67.5,
     turnsCount: 10,
     drsZones: [
-      { start: 0.03, end: 0.16, label: 'DRS 1' },
-      { start: 0.28, end: 0.45, label: 'DRS 2' },
-      { start: 0.55, end: 0.70, label: 'DRS 3' },
+      { start: 0.90, end: 0.06, label: 'DRS 1 (Main Straight)' },
+      { start: 0.10, end: 0.28, label: 'DRS 2 (Uphill)' },
+      { start: 0.32, end: 0.48, label: 'DRS 3 (Downhill)' },
     ],
     turnMilestones: [
       { turn: 1, pos: 0.15 },
@@ -382,7 +383,10 @@ export const CIRCUIT_DETAILS = {
     lapDistanceKm: 4.381,
     averageLapTimeSec: 78.0,
     turnsCount: 14,
-    drsZones: [{ start: 0.03, end: 0.18, label: 'DRS 1' }],
+    drsZones: [
+      { start: 0.90, end: 0.06, label: 'DRS 1 (Main Straight)' },
+      { start: 0.08, end: 0.18, label: 'DRS 2' },
+    ],
     turnMilestones: [
       { turn: 1, pos: 0.16 },
       { turn: 4, pos: 0.36 },
@@ -401,8 +405,8 @@ export const CIRCUIT_DETAILS = {
     averageLapTimeSec: 104.0,
     turnsCount: 20,
     drsZones: [
-      { start: 0.05, end: 0.25, label: 'DRS 1' },
-      { start: 0.52, end: 0.68, label: 'DRS 2' },
+      { start: 0.74, end: 0.06, label: 'DRS 1 (2.2km Straight)' },
+      { start: 0.12, end: 0.22, label: 'DRS 2' },
     ],
     turnMilestones: [
       { turn: 1, pos: 0.18 },
@@ -422,9 +426,9 @@ export const CIRCUIT_DETAILS = {
     averageLapTimeSec: 96.0,
     turnsCount: 19,
     drsZones: [
-      { start: 0.02, end: 0.14, label: 'DRS 1' },
-      { start: 0.42, end: 0.56, label: 'DRS 2' },
-      { start: 0.78, end: 0.92, label: 'DRS 3' },
+      { start: 0.92, end: 0.05, label: 'DRS 1 (Main Straight)' },
+      { start: 0.30, end: 0.45, label: 'DRS 2 (Raffles Ave)' },
+      { start: 0.68, end: 0.78, label: 'DRS 3' },
     ],
     turnMilestones: [
       { turn: 1, pos: 0.12 },
@@ -444,8 +448,8 @@ export const CIRCUIT_DETAILS = {
     averageLapTimeSec: 97.0,
     turnsCount: 20,
     drsZones: [
-      { start: 0.04, end: 0.18, label: 'DRS 1' },
-      { start: 0.48, end: 0.68, label: 'DRS 2' },
+      { start: 0.92, end: 0.05, label: 'DRS 1 (Main Straight)' },
+      { start: 0.50, end: 0.68, label: 'DRS 2 (Back Straight)' },
     ],
     turnMilestones: [
       { turn: 1, pos: 0.14 },
@@ -465,9 +469,9 @@ export const CIRCUIT_DETAILS = {
     averageLapTimeSec: 79.5,
     turnsCount: 17,
     drsZones: [
-      { start: 0.03, end: 0.20, label: 'DRS 1' },
-      { start: 0.38, end: 0.52, label: 'DRS 2' },
-      { start: 0.88, end: 0.98, label: 'DRS 3' },
+      { start: 0.88, end: 0.08, label: 'DRS 1 (Main Straight)' },
+      { start: 0.22, end: 0.35, label: 'DRS 2' },
+      { start: 0.60, end: 0.72, label: 'DRS 3' },
     ],
     turnMilestones: [
       { turn: 1, pos: 0.18 },
@@ -487,8 +491,8 @@ export const CIRCUIT_DETAILS = {
     averageLapTimeSec: 71.5,
     turnsCount: 15,
     drsZones: [
-      { start: 0.04, end: 0.22, label: 'DRS 1' },
-      { start: 0.42, end: 0.58, label: 'DRS 2' },
+      { start: 0.18, end: 0.32, label: 'DRS 1 (Reta Oposta)' },
+      { start: 0.84, end: 0.04, label: 'DRS 2 (Main Straight)' },
     ],
     turnMilestones: [
       { turn: 1, pos: 0.16 },
@@ -508,8 +512,8 @@ export const CIRCUIT_DETAILS = {
     averageLapTimeSec: 94.5,
     turnsCount: 17,
     drsZones: [
-      { start: 0.04, end: 0.18, label: 'DRS 1' },
-      { start: 0.62, end: 0.88, label: 'DRS 2' },
+      { start: 0.18, end: 0.30, label: 'DRS 1 (Koval Lane)' },
+      { start: 0.60, end: 0.86, label: 'DRS 2 (Strip Straight)' },
     ],
     turnMilestones: [
       { turn: 1, pos: 0.14 },
@@ -528,7 +532,7 @@ export const CIRCUIT_DETAILS = {
     lapDistanceKm: 5.419,
     averageLapTimeSec: 84.0,
     turnsCount: 16,
-    drsZones: [{ start: 0.02, end: 0.22, label: 'DRS 1' }],
+    drsZones: [{ start: 0.90, end: 0.06, label: 'DRS 1 (Main Straight)' }],
     turnMilestones: [
       { turn: 1, pos: 0.16 },
       { turn: 6, pos: 0.42 },
@@ -547,8 +551,8 @@ export const CIRCUIT_DETAILS = {
     averageLapTimeSec: 87.0, // ~1:27.000
     turnsCount: 16,
     drsZones: [
-      { start: 0.28, end: 0.48, label: 'DRS 1' },
-      { start: 0.58, end: 0.74, label: 'DRS 2' },
+      { start: 0.28, end: 0.46, label: 'DRS 1 (Back Straight)' },
+      { start: 0.50, end: 0.66, label: 'DRS 2' },
     ],
     turnMilestones: [
       { turn: 1, pos: 0.12 },
