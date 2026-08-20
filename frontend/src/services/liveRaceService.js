@@ -54,6 +54,84 @@ export async function fetchLiveIntervals(sessionKey = 'latest') {
 }
 
 /**
+ * Fetch full live session telemetry from OpenF1 API
+ */
+export async function fetchOpenF1LiveTelemetry(sessionKey = 'latest') {
+  try {
+    const [sessions, positions, intervals, carData, drivers] = await Promise.all([
+      axios.get(`${OPENF1_BASE}/sessions?session_key=${sessionKey}`, { timeout: 4000 }).then(r => r.data).catch(() => []),
+      axios.get(`${OPENF1_BASE}/position?session_key=${sessionKey}`, { timeout: 4000 }).then(r => r.data).catch(() => []),
+      axios.get(`${OPENF1_BASE}/intervals?session_key=${sessionKey}`, { timeout: 4000 }).then(r => r.data).catch(() => []),
+      axios.get(`${OPENF1_BASE}/car_data?session_key=${sessionKey}`, { timeout: 4000 }).then(r => r.data).catch(() => []),
+      axios.get(`${OPENF1_BASE}/drivers?session_key=${sessionKey}`, { timeout: 4000 }).then(r => r.data).catch(() => []),
+    ]);
+
+    const sessionInfo = sessions?.[0] || null;
+    if (!drivers || drivers.length === 0) return null;
+
+    // Group latest position per driver
+    const latestPosMap = {};
+    positions.forEach((p) => {
+      if (!latestPosMap[p.driver_number] || new Date(p.date) > new Date(latestPosMap[p.driver_number].date)) {
+        latestPosMap[p.driver_number] = p;
+      }
+    });
+
+    // Group latest interval per driver
+    const latestIntervalMap = {};
+    intervals.forEach((i) => {
+      if (!latestIntervalMap[i.driver_number] || new Date(i.date) > new Date(latestIntervalMap[i.driver_number].date)) {
+        latestIntervalMap[i.driver_number] = i;
+      }
+    });
+
+    // Group latest car telemetry per driver
+    const latestCarMap = {};
+    carData.forEach((c) => {
+      if (!latestCarMap[c.driver_number] || new Date(c.date) > new Date(latestCarMap[c.driver_number].date)) {
+        latestCarMap[c.driver_number] = c;
+      }
+    });
+
+    // Map drivers to standard schema
+    const mappedDrivers = drivers.map((d) => {
+      const num = d.driver_number;
+      const posObj = latestPosMap[num];
+      const intObj = latestIntervalMap[num];
+      const carObj = latestCarMap[num];
+      const rank = posObj?.position || 1;
+
+      return {
+        id: (d.last_name || d.name_acronym || `driver_${num}`).toLowerCase(),
+        number: num,
+        code: d.name_acronym || `D${num}`,
+        name: d.full_name || `${d.first_name} ${d.last_name}`,
+        team: d.team_name || 'F1 Team',
+        color: d.team_colour ? `#${d.team_colour}` : '#FF8000',
+        rank,
+        gridPos: rank,
+        gapToLeaderSec: intObj?.gap_to_leader ? parseFloat(intObj.gap_to_leader) : 0,
+        intervalToCarAheadSec: intObj?.interval ? parseFloat(intObj.interval) : 0,
+        speed: carObj?.speed || 240,
+        rpm: carObj?.rpm || 11500,
+        gear: carObj?.n_gear || 7,
+        throttle: carObj?.throttle || 100,
+        brake: carObj?.brake || 0,
+        drsOpen: Boolean(carObj?.drs && carObj.drs >= 10),
+      };
+    }).sort((a, b) => a.rank - b.rank);
+
+    return {
+      sessionInfo,
+      drivers: mappedDrivers,
+    };
+  } catch (err) {
+    console.error('Error in fetchOpenF1LiveTelemetry:', err);
+    return null;
+  }
+}
+
+/**
  * Fetch live race control messages (flags, safety cars, penalties) from OpenF1.
  */
 export async function fetchLiveRaceControl(sessionKey = 'latest') {

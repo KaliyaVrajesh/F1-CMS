@@ -58,11 +58,9 @@ const formatTime = (totalSeconds) => {
     return `${hrs}:${mins < 10 ? '0' : ''}${mins}:${secs < 10 ? '0' : ''}${secs}`;
   }
   return `${mins < 10 ? '0' : ''}${mins}:${secs < 10 ? '0' : ''}${secs}`;
-};
-
-const LiveRace = () => {
-  // Modes: 'COUNTDOWN' | 'LIVE_TRACK' | 'GP_REPLAY'
-  const [activeMode, setActiveMode] = useState('COUNTDOWN');
+};const LiveRace = () => {
+  const [isLiveBroadcasting, setIsLiveBroadcasting] = useState(false);
+  const [isReplayMode, setIsReplayMode] = useState(false);
   const [selectedCircuitKey, setSelectedCircuitKey] = useState('Zandvoort');
   const [circuitDetails, setCircuitDetails] = useState(CIRCUIT_DETAILS.Zandvoort);
   const [nextRaceData, setNextRaceData] = useState({
@@ -90,8 +88,8 @@ const LiveRace = () => {
   const [selectedReplayIndex, setSelectedReplayIndex] = useState(0);
   const [replayTimeline, setReplayTimeline] = useState([]);
   const [raceEvents, setRaceEvents] = useState([
-    { id: 1, text: '🟢 Green Flag! Real-time session active on circuit.', time: 'Lap 1' },
-    { id: 2, text: '📡 DRS zones enabled by FIA Race Control.', time: 'Lap 2' },
+    { id: 1, text: '🟢 Green Flag! Live session connected to OpenF1 telemetry API.', time: 'Lap 1' },
+    { id: 2, text: '📡 Official DRS zones active across circuit straights.', time: 'Lap 2' },
   ]);
 
   const lastTickTimeRef = useRef(performance.now());
@@ -114,6 +112,29 @@ const LiveRace = () => {
       .catch(() => {});
   }, []);
 
+  // Continuous background polling from OpenF1 API when Live Broadcast is active
+  useEffect(() => {
+    if (!isLiveBroadcasting || isReplayMode) return;
+
+    let isSubscribed = true;
+
+    const pollOpenF1 = async () => {
+      const liveData = await fetchOpenF1LiveTelemetry('latest');
+      if (isSubscribed && liveData?.drivers && liveData.drivers.length > 0) {
+        setDrivers(liveData.drivers);
+        setLiveDrivers(liveData.drivers);
+      }
+    };
+
+    pollOpenF1();
+    const intervalId = setInterval(pollOpenF1, 3000);
+
+    return () => {
+      isSubscribed = false;
+      clearInterval(intervalId);
+    };
+  }, [isLiveBroadcasting, isReplayMode]);
+
   // Update circuit details when selection changes
   const handleCircuitChange = (key) => {
     playPaddleShift(1.0);
@@ -130,7 +151,7 @@ const LiveRace = () => {
   const getEventsUpToLap = (timeline, targetLap) => {
     const events = [];
     timeline.slice(0, targetLap).forEach((lapItem) => {
-      lapItem.overtakes.forEach((o) => {
+      lapItem.overtakes?.forEach((o) => {
         events.push({
           id: `${o.lap}-${o.overtaker.code}`,
           text: `🏎️ ${o.overtaker.name} (${o.overtaker.code}) overtook ${o.passed.name} for P${o.newPos}!`,
@@ -140,7 +161,7 @@ const LiveRace = () => {
       lapItem.pitStops?.forEach((p) => {
         events.push({
           id: `${lapItem.lap}-pit-${p.code}`,
-          text: `🔧 ${p.name} (${p.code}) pitted for new tires.`,
+          text: `🔧 ${p.name} (${p.code}) pitted for new tires (${p.pitDuration || '2.4s'}).`,
           time: `Lap ${lapItem.lap}`,
         });
       });
@@ -148,9 +169,9 @@ const LiveRace = () => {
     return events.reverse().slice(0, 15);
   };
 
-  // YouTube-style continuous playback loop for GP_REPLAY mode
+  // Continuous playback loop for replay mode
   useEffect(() => {
-    if (activeMode !== 'GP_REPLAY') return;
+    if (!isLiveBroadcasting || !isReplayMode) return;
 
     let animId;
     const playTick = (now) => {
@@ -165,7 +186,6 @@ const LiveRace = () => {
             return totalRaceDurationSec;
           }
 
-          // Compute lap from exact replay time
           const calculatedLap = Math.min(totalLaps, Math.floor(nextTime / lapDurationSec) + 1);
           if (calculatedLap !== currentLap) {
             setCurrentLap(calculatedLap);
@@ -184,7 +204,7 @@ const LiveRace = () => {
     lastTickTimeRef.current = performance.now();
     animId = requestAnimationFrame(playTick);
     return () => cancelAnimationFrame(animId);
-  }, [activeMode, isPlaying, simulationSpeed, flagStatus, lapDurationSec, totalLaps, totalRaceDurationSec, currentLap, replayTimeline]);
+  }, [isLiveBroadcasting, isReplayMode, isPlaying, simulationSpeed, flagStatus, lapDurationSec, totalLaps, totalRaceDurationSec, currentLap, replayTimeline]);
 
   // Load selected historical GP replay data
   const handleSelectReplay = async (idx) => {
@@ -213,10 +233,11 @@ const LiveRace = () => {
         setRaceEvents(initialEvents);
       }
 
-      setActiveMode('GP_REPLAY');
+      setIsReplayMode(true);
+      setIsLiveBroadcasting(true);
       toast.success(`Official replay loaded: ${replayInfo.name}`);
     } else {
-      toast.error('Failed to load replay data, using default session.');
+      toast.error('Failed to load replay data.');
     }
   };
 
@@ -238,17 +259,6 @@ const LiveRace = () => {
       }
     }
   };
-
-  // Handle overtakes on track in LIVE_TRACK mode
-  const handleOvertake = useCallback((overtaker, passedCar) => {
-    playPaddleShift(1.2);
-    const newEvent = {
-      id: `${Date.now()}-${overtaker.id}`,
-      text: `🏎️ ${overtaker.name} (${overtaker.code}) overtook ${passedCar.name} (${passedCar.code})!`,
-      time: `Lap ${overtaker.lap || 1}`,
-    };
-    setRaceEvents((prev) => [newEvent, ...prev.slice(0, 14)]);
-  }, []);
 
   const handleTogglePlay = () => {
     playPaddleShift(1.1);
@@ -273,88 +283,92 @@ const LiveRace = () => {
     handleSeekReplayTime(replayTimeSec + deltaSec);
   };
 
+  const handleOvertake = useCallback((overtaker, passedCar) => {
+    playPaddleShift(1.2);
+    const newEvent = {
+      id: `${Date.now()}-${overtaker.id}`,
+      text: `🏎️ ${overtaker.name} (${overtaker.code}) overtook ${passedCar.name} (${passedCar.code})!`,
+      time: `Lap ${overtaker.lap || 1}`,
+    };
+    setRaceEvents((prev) => [newEvent, ...prev.slice(0, 14)]);
+  }, []);
+
   const selectedDriver = (liveDrivers.length > 0 ? liveDrivers : drivers).find((d) => d.id === selectedDriverId) || null;
   const leaderDriver = (liveDrivers.length > 0 ? liveDrivers : drivers)[0] || null;
 
   return (
     <div className="max-w-7xl mx-auto space-y-6 pb-12">
-      {/* ── Page Top Mode Bar ── */}
-      <motion.div
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="flex flex-wrap items-center justify-between gap-4"
-      >
-        <div>
-          <div className="flex items-center gap-2 mb-1">
-            <span className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-mono font-bold bg-red-500/15 text-f1red border border-red-500/30">
-              <span className="w-1.5 h-1.5 rounded-full bg-f1red animate-ping" />
-              {activeMode === 'COUNTDOWN'
-                ? 'PRE-RACE WAITING ROOM'
-                : activeMode === 'LIVE_TRACK'
-                ? 'LIVE REAL-TIME TRACK'
-                : 'OFFICIAL GP REPLAY'}
-            </span>
-            <span className="text-gray-500 text-xs">·</span>
-            <span className="text-gray-400 font-mono text-xs uppercase">
-              {circuitDetails?.name}
-            </span>
-          </div>
-
-          <h1 className="text-3xl sm:text-4xl font-f1heading font-black text-white uppercase tracking-wider">
-            <span className="text-f1red">Live</span> Race Broadcast
-          </h1>
-        </div>
-
-        {/* Mode Selector Tabs */}
-        <div className="flex items-center gap-1.5 bg-[#090b10] p-1.5 rounded-2xl border border-white/15 shadow-xl">
-          {[
-            { mode: 'COUNTDOWN',  label: '⏱️ Pre-Race Room' },
-            { mode: 'LIVE_TRACK', label: '🔴 Live Track' },
-            { mode: 'GP_REPLAY',  label: '📼 GP Replay' },
-          ].map((tab) => (
-            <button
-              key={tab.mode}
-              onClick={() => {
-                playPaddleShift(1.0);
-                setActiveMode(tab.mode);
-                if (tab.mode === 'GP_REPLAY' && replayTimeline.length === 0) {
-                  handleSelectReplay(0);
-                }
-              }}
-              className={`px-4 py-2 rounded-xl font-mono text-xs font-bold transition-all ${
-                activeMode === tab.mode
-                  ? 'bg-f1red text-white shadow-lg shadow-red-900/30'
-                  : 'text-gray-400 hover:text-white hover:bg-white/5'
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
-      </motion.div>
-
-      {/* ── Mode 1: Pre-Race Countdown Waiting Room ── */}
-      {activeMode === 'COUNTDOWN' && (
+      {/* ── State 1: Before Race Starts (Pre-Race Lounge with Countdown) ── */}
+      {!isLiveBroadcasting && (
         <PreRaceCountdownView
           nextRaceData={nextRaceData}
           circuitDetails={circuitDetails}
           drivers={drivers}
-          onEnterLiveStream={() => setActiveMode('LIVE_TRACK')}
+          onEnterLiveStream={() => {
+            setIsReplayMode(false);
+            setIsLiveBroadcasting(true);
+            toast.success('Live 2D telemetry connected to OpenF1 stream!');
+          }}
           onSelectReplay={() => {
-            setActiveMode('GP_REPLAY');
             handleSelectReplay(0);
           }}
         />
       )}
 
-      {/* ── Mode 2, 3: Live 2D Track Telemetry & GP Replay ── */}
-      {activeMode !== 'COUNTDOWN' && (
-        <>
-          {/* ── Video Player Style Control Bar (MultiViewer Style) ── */}
+      {/* ── State 2: Live Race Broadcast (2D Track, Timing Tower, HUD) ── */}
+      {isLiveBroadcasting && (
+        <div className="space-y-6">
+          {/* Header Bar with Back Button */}
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => {
+                  playPaddleShift(1.0);
+                  setIsLiveBroadcasting(false);
+                }}
+                className="px-3.5 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/15 text-white text-xs font-mono font-bold flex items-center gap-1.5 transition-all"
+              >
+                <span>← Back to Pre-Race Lounge</span>
+              </button>
+
+              <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-mono font-bold bg-red-500/15 text-f1red border border-red-500/30">
+                <span className="w-2 h-2 rounded-full bg-f1red animate-ping" />
+                {isReplayMode ? 'OFFICIAL GP REPLAY' : 'OPENF1 LIVE REAL-TIME FEED'}
+              </span>
+            </div>
+
+            {/* Circuit & Replay Selectors */}
+            <div className="flex items-center gap-3 flex-wrap">
+              <select
+                value={selectedCircuitKey}
+                onChange={(e) => handleCircuitChange(e.target.value)}
+                className="px-3 py-1.5 rounded-xl bg-[#090b10] border border-white/15 text-white font-mono text-xs font-bold focus:outline-none focus:border-f1red cursor-pointer shadow-lg"
+              >
+                {OFFICIAL_F1_CALENDAR.map((c) => (
+                  <option key={c.key} value={c.key} className="bg-dark-900 text-white">
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+
+              <select
+                value={selectedReplayIndex}
+                onChange={(e) => handleSelectReplay(parseInt(e.target.value, 10))}
+                className="px-3 py-1.5 rounded-xl bg-[#090b10] border border-white/15 text-amber-400 font-mono text-xs font-bold focus:outline-none focus:border-amber-400 cursor-pointer shadow-lg"
+              >
+                {HISTORICAL_REPLAYS.map((r, idx) => (
+                  <option key={idx} value={idx} className="bg-dark-900 text-white">
+                    📼 {r.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* ── Player Control Bar (Play/Pause, Flags, Speed) ── */}
           <div className="p-3 rounded-2xl bg-[#090b10] border border-white/10 flex flex-wrap items-center justify-between gap-3 shadow-xl">
-            {/* Left: Play/Pause & Quick Jump Buttons */}
-            <div className="flex items-center gap-1.5 flex-wrap">
-              {activeMode === 'GP_REPLAY' && (
+            <div className="flex items-center gap-2 flex-wrap">
+              {isReplayMode && (
                 <div className="flex items-center gap-1">
                   {[-60, -30, -5].map((sec) => (
                     <button
@@ -375,7 +389,7 @@ const LiveRace = () => {
                 <span>{isPlaying ? '⏸️ PAUSE' : '▶️ PLAY'}</span>
               </button>
 
-              {activeMode === 'GP_REPLAY' && (
+              {isReplayMode && (
                 <div className="flex items-center gap-1">
                   {[5, 30, 60].map((sec) => (
                     <button
@@ -383,156 +397,118 @@ const LiveRace = () => {
                       onClick={() => handleJumpTime(sec)}
                       className="px-2 py-1 rounded-lg bg-white/5 hover:bg-white/15 text-[10px] font-mono text-gray-300 font-bold border border-white/10 transition-all"
                     >
-                      {sec > 59 ? '+1m' : `+${sec}s`}
+                      {sec >= 60 ? '+1m' : `+${sec}s`}
                     </button>
                   ))}
                 </div>
               )}
 
-              {/* Speed Multipliers */}
-              <div className="flex items-center gap-0.5 bg-black/50 p-1 rounded-xl border border-white/10 ml-1">
-                {[0.5, 1.0, 2.0, 5.0, 10.0, 20.0].map((s) => (
+              {/* Speed Presets */}
+              <div className="flex items-center gap-1 pl-2 border-l border-white/10">
+                {[0.5, 1, 2, 5, 10, 20].map((speed) => (
                   <button
-                    key={s}
-                    onClick={() => handleSpeedChange(s)}
-                    className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-bold transition-all ${
-                      simulationSpeed === s
-                        ? 'bg-amber-500 text-black shadow-md font-black'
-                        : 'text-gray-400 hover:text-white'
+                    key={speed}
+                    onClick={() => handleSpeedChange(speed)}
+                    className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold transition-all ${
+                      simulationSpeed === speed
+                        ? 'bg-amber-500 text-black font-black'
+                        : 'bg-white/5 text-gray-400 hover:text-white'
                     }`}
                   >
-                    {s}x
+                    {speed}x
                   </button>
                 ))}
               </div>
             </div>
 
-            {/* Middle: MultiViewer Style Video Seek Scrubber */}
-            {activeMode === 'GP_REPLAY' ? (
-              <div className="flex items-center gap-3 flex-1 max-w-xl mx-2 bg-black/50 px-4 py-2 rounded-xl border border-white/10">
-                {/* Time & Lap Label */}
-                <div className="text-xs font-mono font-bold shrink-0 text-white flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-f1red animate-pulse" />
-                  <span>{formatTime(replayTimeSec)} / {formatTime(totalRaceDurationSec)}</span>
-                  <span className="text-gray-400 text-[11px]">· LAP {currentLap}/{totalLaps}</span>
-                </div>
-
-                {/* Smooth Video Seek Slider */}
-                <input
-                  type="range"
-                  min="0"
-                  max={totalRaceDurationSec}
-                  step="1"
-                  value={replayTimeSec}
-                  onChange={(e) => handleSeekReplayTime(e.target.value)}
-                  className="w-full h-2 bg-white/20 rounded-lg appearance-none cursor-pointer accent-f1red transition-all"
-                  title="Drag timeline to seek race"
-                />
-              </div>
-            ) : (
-              /* Middle: Race Flags in Live Mode */
-              <div className="flex items-center gap-1.5">
-                <span className="text-[10px] font-mono text-gray-500 uppercase tracking-widest hidden md:inline mr-1">
-                  FLAGS:
-                </span>
+            {/* Flag Controls */}
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-mono font-bold text-gray-400 uppercase">FLAGS:</span>
+              <div className="flex items-center gap-1">
                 {[
-                  { flag: 'GREEN', label: '🟢 GREEN' },
+                  { flag: 'GREEN',  label: '🟢 GREEN' },
                   { flag: 'YELLOW', label: '🟡 YELLOW' },
-                  { flag: 'SC', label: '🔶 SC' },
-                  { flag: 'VSC', label: '⚡ VSC' },
-                  { flag: 'RED', label: '🔴 RED' },
+                  { flag: 'SC',     label: '🔸 SC' },
+                  { flag: 'VSC',    label: '⚡ VSC' },
+                  { flag: 'RED',     label: '🔴 RED' },
                 ].map((f) => (
                   <button
                     key={f.flag}
                     onClick={() => handleFlagChange(f.flag)}
-                    className={`px-2.5 py-1 rounded-lg text-[10px] font-mono font-bold transition-all ${
+                    className={`px-2.5 py-1 rounded-lg font-mono text-[10px] font-bold border transition-all ${
                       flagStatus === f.flag
-                        ? 'bg-white/20 text-white border border-white/30 shadow-md'
-                        : 'text-gray-400 hover:text-white bg-white/5'
+                        ? 'bg-white/20 text-white border-white'
+                        : 'bg-white/5 text-gray-400 border-white/5 hover:bg-white/10'
                     }`}
                   >
                     {f.label}
                   </button>
                 ))}
               </div>
-            )}
-
-            {/* Right: Calendar Circuit / Replay Selector */}
-            <div className="flex items-center gap-2">
-              {activeMode === 'GP_REPLAY' ? (
-                <select
-                  value={selectedReplayIndex}
-                  onChange={(e) => handleSelectReplay(parseInt(e.target.value, 10))}
-                  className="bg-dark-900 border border-white/15 text-white text-xs font-mono px-3 py-1.5 rounded-xl focus:outline-none focus:border-amber-500 cursor-pointer shadow-lg"
-                >
-                  {HISTORICAL_REPLAYS.map((r, idx) => (
-                    <option key={idx} value={idx} className="bg-dark-900 text-white">
-                      {r.name}
-                    </option>
-                  ))}
-                </select>
-              ) : (
-                <select
-                  value={selectedCircuitKey}
-                  onChange={(e) => handleCircuitChange(e.target.value)}
-                  className="bg-dark-900 border border-white/15 text-white text-xs font-mono px-3 py-1.5 rounded-xl focus:outline-none focus:border-amber-500 cursor-pointer shadow-lg"
-                >
-                  {OFFICIAL_F1_CALENDAR.map((c) => (
-                    <option key={c.key} value={c.key} className="bg-dark-900 text-white">
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
-              )}
             </div>
           </div>
 
-          {/* ── Race HUD Status & MultiViewer Dual-Telemetry ── */}
+          {/* Replay Scrubbing Progress Bar */}
+          {isReplayMode && (
+            <div className="p-3 rounded-2xl bg-[#090b10] border border-white/10 space-y-1.5 shadow-xl">
+              <div className="flex items-center justify-between text-xs font-mono text-gray-400 font-bold">
+                <span className="text-white">RACE TIMELINE SCRUBBER</span>
+                <span>
+                  {formatTime(replayTimeSec)} / {formatTime(totalRaceDurationSec)} (LAP {currentLap} / {totalLaps})
+                </span>
+              </div>
+              <input
+                type="range"
+                min={0}
+                max={totalRaceDurationSec}
+                step={0.5}
+                value={replayTimeSec}
+                onChange={(e) => handleSeekReplayTime(e.target.value)}
+                className="w-full h-2 bg-white/10 rounded-lg appearance-none cursor-pointer accent-f1red"
+              />
+            </div>
+          )}
+
+          {/* Dual Driver Telemetry Strip */}
           <LiveRaceHUD
-            circuitDetails={circuitDetails}
+            selectedDriver={selectedDriver}
+            leaderDriver={leaderDriver}
             flagStatus={flagStatus}
             currentLap={currentLap}
             totalLaps={totalLaps}
-            selectedDriver={selectedDriver}
-            leaderDriver={leaderDriver}
+            circuitDetails={circuitDetails}
             onDeselectDriver={() => setSelectedDriverId(null)}
           />
 
-          {/* ── Main Layout: Track Visualizer (Left) & Timing Tower (Right) ── */}
+          {/* 2D Track Visualizer & Live Timing Tower */}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-            {/* Left Column: 2D Track Map (8 cols) */}
             <div className="lg:col-span-8 space-y-4">
               <LiveTrackVisualizer
-                circuitDetails={circuitDetails}
-                drivers={drivers}
+                drivers={liveDrivers.length > 0 ? liveDrivers : drivers}
                 selectedDriverId={selectedDriverId}
                 onSelectDriver={setSelectedDriverId}
+                circuitDetails={circuitDetails}
+                flagStatus={flagStatus}
                 isPlaying={isPlaying}
                 simulationSpeed={simulationSpeed}
-                flagStatus={flagStatus}
-                viewMode={activeMode}
-                replayTimeSec={replayTimeSec}
                 lapDurationSec={lapDurationSec}
-                replayTimeline={replayTimeline}
-                currentLap={currentLap}
+                currentLapNum={currentLap}
                 totalLaps={totalLaps}
+                replayTimeSec={replayTimeSec}
+                replayTimeline={replayTimeline}
                 onOvertake={handleOvertake}
                 onPositionsUpdate={setLiveDrivers}
               />
 
-              {/* Live Race Event Feed */}
+              {/* Live Event Feed */}
               <div className="p-4 rounded-2xl bg-[#090b10] border border-white/10 shadow-xl">
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-xs font-mono font-black text-amber-400 uppercase tracking-widest flex items-center gap-1.5">
                     <span>🎙️</span>
-                    <span>
-                      {activeMode === 'GP_REPLAY'
-                        ? 'AUTHENTIC OVERTAKES & PIT LOG'
-                        : 'LIVE RACE COMMENTARY & EVENTS'}
-                    </span>
+                    <span>LIVE RACE COMMENTARY & TELEMETRY LOG</span>
                   </span>
                   <span className="text-[10px] font-mono text-gray-500">
-                    REAL-TIME UPDATES
+                    REAL-TIME OPENF1 UPDATES
                   </span>
                 </div>
                 <div className="space-y-1.5 text-xs font-mono text-gray-300 divide-y divide-white/5 max-h-28 overflow-y-auto">
@@ -546,7 +522,6 @@ const LiveRace = () => {
               </div>
             </div>
 
-            {/* Right Column: Live Timing Tower (4 cols) */}
             <div className="lg:col-span-4">
               <LiveTimingTower
                 drivers={liveDrivers.length > 0 ? liveDrivers : drivers}
@@ -558,7 +533,7 @@ const LiveRace = () => {
               />
             </div>
           </div>
-        </>
+        </div>
       )}
     </div>
   );
