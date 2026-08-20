@@ -270,14 +270,6 @@ const formatTime = (totalSeconds) => {
     setSimulationSpeed(speed);
   };
 
-  const handleFlagChange = (flag) => {
-    playStartingBeep(flag === 'GREEN');
-    setFlagStatus(flag);
-    toast(`Race Flag updated to ${flag}`, {
-      icon: flag === 'GREEN' ? '🟢' : flag === 'RED' ? '🔴' : '🟡',
-    });
-  };
-
   const handleJumpTime = (deltaSec) => {
     playPaddleShift(1.1);
     handleSeekReplayTime(replayTimeSec + deltaSec);
@@ -421,30 +413,12 @@ const formatTime = (totalSeconds) => {
               </div>
             </div>
 
-            {/* Flag Controls */}
+            {/* Live FIA Stream Status Pill */}
             <div className="flex items-center gap-2">
-              <span className="text-[10px] font-mono font-bold text-gray-400 uppercase">FLAGS:</span>
-              <div className="flex items-center gap-1">
-                {[
-                  { flag: 'GREEN',  label: '🟢 GREEN' },
-                  { flag: 'YELLOW', label: '🟡 YELLOW' },
-                  { flag: 'SC',     label: '🔸 SC' },
-                  { flag: 'VSC',    label: '⚡ VSC' },
-                  { flag: 'RED',     label: '🔴 RED' },
-                ].map((f) => (
-                  <button
-                    key={f.flag}
-                    onClick={() => handleFlagChange(f.flag)}
-                    className={`px-2.5 py-1 rounded-lg font-mono text-[10px] font-bold border transition-all ${
-                      flagStatus === f.flag
-                        ? 'bg-white/20 text-white border-white'
-                        : 'bg-white/5 text-gray-400 border-white/5 hover:bg-white/10'
-                    }`}
-                  >
-                    {f.label}
-                  </button>
-                ))}
-              </div>
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-white/5 border border-white/10 text-xs font-mono font-bold text-gray-300">
+                <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                <span>FIA RACE CONTROL: {flagStatus}</span>
+              </span>
             </div>
           </div>
 
