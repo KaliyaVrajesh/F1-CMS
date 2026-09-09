@@ -24,7 +24,15 @@ const getCircuits = asyncHandler(async (req, res) => {
 
 const getCurrentSeasonCircuits = asyncHandler(async (req, res) => {
   const year = parseInt(req.params.year || req.query.year, 10) || undefined;
-  const data = await f1.getCurrentSeasonCircuits(year);
+  let data = await f1.getCurrentSeasonCircuits(year);
+  
+  // If no data returned for the requested year (e.g. future season not yet published),
+  // fall back to the most recent year that has data
+  if (!data || data.length === 0) {
+    const fallbackYear = (year || new Date().getFullYear()) - 1;
+    data = await f1.getCurrentSeasonCircuits(fallbackYear);
+  }
+  
   res.json(data);
 });
 
