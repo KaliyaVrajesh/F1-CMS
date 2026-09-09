@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { getConstructors, createConstructor, updateConstructor, deleteConstructor } from '../services/api';
 import toast from 'react-hot-toast';
+import SEOHead from '../components/SEOHead';
 
 const ManageConstructors = () => {
   const [constructors, setConstructors] = useState([]);
@@ -88,6 +89,7 @@ const ManageConstructors = () => {
 
   return (
     <div className="max-w-7xl mx-auto">
+      <SEOHead title="Manage Constructors" description="Manage F1 constructors in CMS." noIndex={true} />
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}

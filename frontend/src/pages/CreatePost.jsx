@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { createPost } from '../services/api';
 import toast from 'react-hot-toast';
+import SEOHead from '../components/SEOHead';
 
 const CreatePost = () => {
   const [formData, setFormData] = useState({
@@ -35,6 +36,7 @@ const CreatePost = () => {
 
   return (
     <div className="max-w-4xl mx-auto">
+      <SEOHead title="Create Post" description="Create a new article for F1 CMS." noIndex={true} />
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}

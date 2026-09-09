@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { getF1ConstructorStandings, getF1AllSeasons } from '../services/api';
 import toast from 'react-hot-toast';
 import AnimatedConstructorLeaderboard from '../components/AnimatedConstructorLeaderboard';
+import SEOHead from '../components/SEOHead';
 
 const TEAM_COLOURS = {
   'red_bull':       '#3671C6',
@@ -72,6 +73,11 @@ const ConstructorStandings = () => {
 
   return (
     <div className="max-w-7xl mx-auto">
+      <SEOHead
+        title={`Constructor Standings ${selectedSeason}`}
+        description={`Formula 1 Constructor World Championship standings for ${selectedSeason}. Team points, wins, and championship battle.`}
+        canonicalPath="/standings/constructors"
+      />
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}

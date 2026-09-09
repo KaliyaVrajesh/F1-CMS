@@ -4,6 +4,7 @@ import { getF1DriverStandings, getF1AllSeasons, getF1NextRace, getF1LastRaceResu
 import toast from 'react-hot-toast';
 import AnimatedLeaderboard from '../components/AnimatedLeaderboard';
 import TrophyReveal from '../components/TrophyReveal';
+import SEOHead from '../components/SEOHead';
 
 import { getTeamColor } from '../utils/teamColors';
 
@@ -91,6 +92,11 @@ const DriverStandings = () => {
 
   return (
     <div className="max-w-7xl mx-auto">
+      <SEOHead
+        title={`Driver Standings ${selectedSeason}`}
+        description={`Formula 1 Driver World Championship standings for the ${selectedSeason} season. Points, wins, and race-by-race performance.`}
+        canonicalPath="/standings/drivers"
+      />
       {showTrophy && drivers[0] && (
         <TrophyReveal
           championName={drivers[0].name}

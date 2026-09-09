@@ -121,7 +121,7 @@ export default function RaceCountdownWidget() {
             </div>
 
             <Link
-              to="/circuits-map"
+              to="/circuits"
               className="px-4 py-2 bg-f1red/15 hover:bg-f1red text-f1red hover:text-white rounded-lg text-xs font-bold uppercase tracking-wider border border-f1red/30 transition-all duration-300 flex items-center gap-1.5"
             >
               Explore Circuit Map →

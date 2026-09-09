@@ -4,6 +4,7 @@ import useAuth from '../hooks/useAuth';
 import F1ParticleCanvas from '../components/F1ParticleCanvas';
 import AnimatedText from '../components/AnimatedText';
 import RaceCountdownWidget from '../components/RaceCountdownWidget';
+import SEOHead from '../components/SEOHead';
 
 const ChampionshipDashboard = () => {
   const { isAdmin } = useAuth();
@@ -24,7 +25,7 @@ const ChampionshipDashboard = () => {
     {
       title: 'Circuits Map',
       description: 'Explore F1 circuits around the world',
-      link: '/circuits-map',
+      link: '/circuits',
       icon: '🗺️',
     },
     {
@@ -52,6 +53,11 @@ const ChampionshipDashboard = () => {
 
   return (
     <div className="relative">
+      <SEOHead
+        title="Championship Hub"
+        description="Formula 1 Championship Hub — driver standings, constructor standings, circuits, race management, and live race countdown."
+        canonicalPath="/championship"
+      />
       <F1ParticleCanvas />
 
       {/* Content sits above the fixed canvas */}

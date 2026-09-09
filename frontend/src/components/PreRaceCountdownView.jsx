@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { getTeamName } from '../utils/teamColors';
+import RacePrediction from './RacePrediction';
 
 // ── Timezone utilities ────────────────────────────────────────────────────────
 
@@ -216,11 +217,6 @@ const PreRaceCountdownView = ({
         <div className="absolute inset-0 pointer-events-none opacity-20 bg-[radial-gradient(#E10600_1px,transparent_1px)] [background-size:24px_24px]" />
 
         <div className="relative z-10 max-w-3xl mx-auto space-y-6">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 border border-white/10 text-xs font-mono text-gray-300">
-            <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
-            <span>OFFICIAL F1 PRE-RACE GATE · WAITING ROOM</span>
-          </div>
-
           <div>
             <span className="text-3xl sm:text-4xl">{circuitDetails?.flag || '🏁'}</span>
             <h1 className="text-3xl sm:text-5xl font-f1heading font-black text-white uppercase tracking-wider mt-2">

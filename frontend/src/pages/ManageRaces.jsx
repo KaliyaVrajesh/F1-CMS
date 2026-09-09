@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { getRaces, getDrivers, createRace, submitRaceResults } from '../services/api';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
+import SEOHead from '../components/SEOHead';
 
 const ManageRaces = () => {
   const navigate = useNavigate();
@@ -123,6 +124,7 @@ const ManageRaces = () => {
 
   return (
     <div className="max-w-7xl mx-auto">
+      <SEOHead title="Manage Races" description="Manage F1 races in CMS." noIndex={true} />
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}

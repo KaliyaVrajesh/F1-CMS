@@ -9,6 +9,7 @@ import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { RedBullScene, McLarenScene } from '../components/F1CarScene';
 import TopographicFlowCanvas from '../components/TopographicFlowCanvas';
 import TelemetryHUD from '../components/TelemetryHUD';
+import SEOHead from '../components/SEOHead';
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -433,6 +434,18 @@ const Home = () => {
 
   return (
     <div style={{ height: '100vh', overflow: 'hidden', position: 'relative' }}>
+      <SEOHead
+        title="F1 CMS"
+        description="Your ultimate Formula 1 content hub — live race data, championship standings, driver profiles, circuit maps, F1 legends, and AI-powered race predictions."
+        canonicalPath="/"
+        schemaData={{
+          '@context': 'https://schema.org',
+          '@type': 'WebSite',
+          name: 'F1 CMS',
+          url: 'https://f1-cms.vercel.app',
+          description: 'Formula 1 content management hub with live data, standings, circuits, and predictions.',
+        }}
+      />
 
       <AnimatePresence>
         {!showPosts && (

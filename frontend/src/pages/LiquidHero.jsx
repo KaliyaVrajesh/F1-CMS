@@ -259,6 +259,9 @@ const LiquidHero = () => {
             <Link to="/legends" className="text-white hover:text-yellow-400 transition-colors">
               Legends
             </Link>
+            <Link to="/predictions" className="text-white hover:text-yellow-400 transition-colors">
+              Predictions
+            </Link>
           </nav>
         </div>
 

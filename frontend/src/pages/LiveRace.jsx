@@ -9,6 +9,7 @@ import LiveTimingTower from '../components/LiveTimingTower';
 import LiveRaceHUD from '../components/LiveRaceHUD';
 import PreRaceCountdownView from '../components/PreRaceCountdownView';
 import { playPaddleShift, playStartingBeep } from '../utils/audio';
+import SEOHead from '../components/SEOHead';
 
 // Official FIA Formula 1 World Championship Calendar
 const OFFICIAL_F1_CALENDAR = [
@@ -290,6 +291,11 @@ const formatTime = (totalSeconds) => {
 
   return (
     <div className="max-w-7xl mx-auto space-y-6 pb-12">
+      <SEOHead
+        title="Race Schedule & Live Timing"
+        description="Formula 1 race schedule, live timing, track visualization, and Grand Prix replays. Follow every session from practice to race day."
+        canonicalPath="/live-race"
+      />
       {/* ── State 1: Before Race Starts (Pre-Race Lounge with Countdown) ── */}
       {!isLiveBroadcasting && (
         <PreRaceCountdownView

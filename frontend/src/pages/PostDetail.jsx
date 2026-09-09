@@ -3,6 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { getPostById } from '../services/api';
 import toast from 'react-hot-toast';
+import SEOHead from '../components/SEOHead';
 
 const PostDetail = () => {
   const { id } = useParams();
@@ -49,6 +50,20 @@ const PostDetail = () => {
       animate={{ opacity: 1, y: 0 }}
       className="max-w-4xl mx-auto"
     >
+      <SEOHead
+        title={post.title || 'Post'}
+        description={post.content ? post.content.substring(0, 160) : 'Read this F1 CMS article.'}
+        canonicalPath={`/posts/${id}`}
+        ogType="article"
+        ogImage={post.imageUrl || '/images/f1-og-default.jpg'}
+        schemaData={{
+          '@context': 'https://schema.org',
+          '@type': 'NewsArticle',
+          headline: post.title,
+          datePublished: post.createdAt,
+          author: { '@type': 'Person', name: post.author?.name || 'F1 CMS' },
+        }}
+      />
       <Link to="/" className="text-f1red hover:underline mb-6 inline-block">
         ← Back to posts
       </Link>

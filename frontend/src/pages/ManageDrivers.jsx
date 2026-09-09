@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { getDrivers, getConstructors, createDriver, updateDriver, deleteDriver } from '../services/api';
 import toast from 'react-hot-toast';
+import SEOHead from '../components/SEOHead';
 
 const ManageDrivers = () => {
   const [drivers, setDrivers] = useState([]);
@@ -36,7 +37,6 @@ const ManageDrivers = () => {
       }
     } catch (error) {
       toast.error('Failed to fetch data: ' + (error.response?.data?.message || error.message));
-      console.error('Fetch error:', error);
     } finally {
       setLoading(false);
     }
@@ -103,6 +103,7 @@ const ManageDrivers = () => {
 
   return (
     <div className="max-w-7xl mx-auto">
+      <SEOHead title="Manage Drivers" description="Manage F1 drivers in CMS." noIndex={true} />
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}

@@ -1,4 +1,4 @@
-import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { AuthProvider } from './context/AuthContext';
 import { useState, useEffect, useRef } from 'react';
@@ -23,12 +23,14 @@ import Legends from './pages/Legends';
 import LiveRace from './pages/LiveRace';
 import LiquidHero from './pages/LiquidHero';
 import LiquidHeroConfigurable from './pages/LiquidHeroConfigurable';
+import Predictions from './pages/Predictions';
+import NotFound from './pages/NotFound';
 import PrivateRoute from './components/PrivateRoute';
 import AdminRoute from './components/AdminRoute';
 import LoadingScreen from './components/LoadingScreen';
 import AerodynamicCursor from './components/AerodynamicCursor';
 
-// Legend images to preload
+// Legend images to preload (best-effort, non-blocking)
 const LEGEND_IMAGES = [
   'https://upload.wikimedia.org/wikipedia/commons/thumb/5/5e/Ayrton_Senna_1991_Canada.jpg/800px-Ayrton_Senna_1991_Canada.jpg',
   'https://upload.wikimedia.org/wikipedia/commons/thumb/4/4e/Ayrton_Senna_1993_Britain.jpg/800px-Ayrton_Senna_1993_Britain.jpg',
@@ -44,6 +46,9 @@ const LEGEND_IMAGES = [
   'https://upload.wikimedia.org/wikipedia/commons/thumb/c/c3/Jim_Clark_1967_Zandvoort.jpg/800px-Jim_Clark_1967_Zandvoort.jpg',
 ];
 
+// Maximum time (ms) to wait for external image preloading before proceeding
+const IMAGE_PRELOAD_TIMEOUT = 4000;
+
 function AppContent() {
   const location    = useLocation();
   const isFirstLoad = useRef(true);
@@ -56,21 +61,29 @@ function AppContent() {
   // Track Three.js / GLB loading progress via drei's useProgress
   const { progress: glbProgress, active, loaded, total } = useProgress();
 
-  // Preload legend images on mount
+  // Preload legend images on mount (with timeout safety)
   useEffect(() => {
     let loadedCount = 0;
     const totalImages = LEGEND_IMAGES.length;
+    let resolved = false;
 
     if (totalImages === 0) {
       setImagesReady(true);
       return;
     }
 
+    const markReady = () => {
+      if (resolved) return;
+      resolved = true;
+      setImagesReady(true);
+      setImageProgress(100);
+    };
+
     const checkComplete = () => {
       loadedCount++;
       setImageProgress(Math.floor((loadedCount / totalImages) * 100));
       if (loadedCount >= totalImages) {
-        setImagesReady(true);
+        markReady();
       }
     };
 
@@ -80,6 +93,10 @@ function AppContent() {
       img.onerror = checkComplete;
       img.src = src;
     });
+
+    // Safety timeout: don't let slow/failing external images block app startup
+    const timeout = setTimeout(markReady, IMAGE_PRELOAD_TIMEOUT);
+    return () => clearTimeout(timeout);
   }, []);
 
   const isHomeRoute = location.pathname === '/' || location.pathname === '';
@@ -163,7 +180,7 @@ function AppContent() {
           <Route path="posts/:id" element={<PostDetail />} />
           <Route path="login" element={<Login />} />
           
-          {/* Blog Management */}
+          {/* Blog Management (Admin) */}
           <Route
             path="dashboard"
             element={
@@ -195,15 +212,17 @@ function AppContent() {
             }
           />
 
-          {/* Championship Management */}
+          {/* Public F1 Content */}
           <Route path="live-race" element={<LiveRace />} />
-          <Route path="live" element={<LiveRace />} />
           <Route path="championship" element={<ChampionshipDashboard />} />
           <Route path="standings/drivers" element={<DriverStandings />} />
           <Route path="standings/constructors" element={<ConstructorStandings />} />
-          <Route path="circuits-map" element={<CircuitsMap />} />
           <Route path="circuits" element={<CircuitsMap />} />
+          <Route path="circuits-map" element={<Navigate to="/circuits" replace />} />
           <Route path="legends" element={<Legends />} />
+          <Route path="predictions" element={<Predictions />} />
+
+          {/* Championship Management (Admin) */}
           <Route
             path="manage/drivers"
             element={
@@ -254,6 +273,9 @@ function AppContent() {
               </PrivateRoute>
             }
           />
+
+          {/* 404 Catch-All */}
+          <Route path="*" element={<NotFound />} />
         </Route>
       </Routes>
     </>

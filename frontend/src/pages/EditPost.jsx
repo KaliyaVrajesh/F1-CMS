@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { getPostById, updatePost } from '../services/api';
 import toast from 'react-hot-toast';
+import SEOHead from '../components/SEOHead';
 
 const EditPost = () => {
   const { id } = useParams();
@@ -66,6 +67,7 @@ const EditPost = () => {
 
   return (
     <div className="max-w-4xl mx-auto">
+      <SEOHead title="Edit Post" description="Edit article in F1 CMS." noIndex={true} />
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}

@@ -4,6 +4,7 @@ import { getF1SeasonCircuits, getF1AllSeasons, getF1RaceResults } from '../servi
 import toast from 'react-hot-toast';
 import CircuitSVG from '../components/CircuitSVG';
 import F1Globe from '../components/F1Globe';
+import SEOHead from '../components/SEOHead';
 
 // ─── Flag map ─────────────────────────────────────────────────────────────────
 const FLAG = {
@@ -320,6 +321,11 @@ const CircuitsMap = () => {
   return (
     <div className="fixed inset-0 overflow-hidden"
       style={{ top: '64px', background: 'radial-gradient(ellipse at 40% 50%, #0a1628 0%, #020408 65%)' }}>
+      <SEOHead
+        title="F1 Circuits"
+        description="Explore every Formula 1 circuit on an interactive 3D globe. Race calendar, circuit details, and results for each Grand Prix venue."
+        canonicalPath="/circuits"
+      />
 
       {/* Starfield */}
       <div className="absolute inset-0 pointer-events-none">

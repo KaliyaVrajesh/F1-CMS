@@ -5,6 +5,7 @@ import { getRaceById, getDrivers, updateRaceResults } from '../services/api';
 import toast from 'react-hot-toast';
 import gsap from 'gsap';
 import RaceIntro from '../components/RaceIntro';
+import SEOHead from '../components/SEOHead';
 
 const EditRaceResults = () => {
   const { id } = useParams();
@@ -128,6 +129,7 @@ const EditRaceResults = () => {
 
   return (
     <div className="max-w-7xl mx-auto">
+      <SEOHead title="Edit Race Results" description="Edit F1 race results in CMS." noIndex={true} />
       {showIntro && race && (
         <RaceIntro
           raceName={race.name}

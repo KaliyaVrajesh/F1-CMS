@@ -39,6 +39,25 @@ A modern, production-ready MERN stack application for managing Formula 1 content
 - Automatic wins and podiums tracking
 - Dynamic leaderboards sorted by points
 
+### F1 Legends Hall of Fame
+- Interactive 3D flip cards showcasing F1 legends
+- Tilt and mouse interaction effects
+- Admin image upload/override system (Base64 & URL support)
+- Career statistics and legacy information
+- Responsive design with smooth animations
+
+### AI-Powered Race Predictions (NEW)
+- Statistical prediction engine for race outcomes
+- Qualifying predictions with pole position probability
+- Multi-factor analysis:
+  - Circuit-specific historical performance (30%)
+  - Current season form and points (25%)
+  - Recent 5-race momentum (20%)
+  - Season wins and podiums (10% each)
+- Win probability and podium probability calculations
+- Confidence ratings and detailed reasoning
+- Support for all F1 circuits and seasons
+
 ## Project Structure
 
 ```
@@ -48,28 +67,66 @@ f1-cms/
 │   │   └── db.js
 │   ├── controllers/
 │   │   ├── authController.js
-│   │   └── postController.js
+│   │   ├── constructorController.js
+│   │   ├── driverController.js
+│   │   ├── f1DataController.js
+│   │   ├── legendController.js
+│   │   ├── postController.js
+│   │   ├── predictionController.js
+│   │   ├── raceController.js
+│   │   ├── seasonController.js
+│   │   └── standingsController.js
 │   ├── middleware/
 │   │   ├── authMiddleware.js
 │   │   └── errorMiddleware.js
 │   ├── models/
-│   │   ├── User.js
-│   │   └── Post.js
+│   │   ├── Constructor.js
+│   │   ├── Driver.js
+│   │   ├── Legend.js
+│   │   ├── Post.js
+│   │   ├── Race.js
+│   │   ├── RaceResult.js
+│   │   ├── Season.js
+│   │   └── User.js
 │   ├── routes/
 │   │   ├── authRoutes.js
-│   │   └── postRoutes.js
+│   │   ├── constructorRoutes.js
+│   │   ├── driverRoutes.js
+│   │   ├── f1DataRoutes.js
+│   │   ├── legendRoutes.js
+│   │   ├── postRoutes.js
+│   │   ├── raceRoutes.js
+│   │   ├── seasonRoutes.js
+│   │   └── standingsRoutes.js
+│   ├── services/
+│   │   ├── f1DataService.js
+│   │   ├── pointsService.js
+│   │   └── predictionService.js
 │   ├── .env.example
 │   ├── Dockerfile
 │   ├── package.json
 │   └── server.js
 ├── frontend/
+│   ├── public/
+│   │   ├── circuits/
+│   │   ├── images/
+│   │   ├── robots.txt
+│   │   └── sitemap.xml
 │   ├── src/
 │   │   ├── components/
+│   │   │   ├── Navbar.jsx
+│   │   │   ├── SEOHead.jsx
+│   │   │   └── ...
 │   │   ├── context/
 │   │   ├── hooks/
 │   │   ├── layouts/
 │   │   ├── pages/
+│   │   │   ├── Home.jsx
+│   │   │   ├── NotFound.jsx
+│   │   │   ├── Predictions.jsx
+│   │   │   └── ...
 │   │   ├── services/
+│   │   ├── utils/
 │   │   ├── App.jsx
 │   │   ├── index.css
 │   │   └── main.jsx
@@ -211,6 +268,19 @@ docker-compose down -v
 ### Standings
 - GET `/api/standings/drivers/:seasonYear` - Get driver standings (Public)
 - GET `/api/standings/constructors/:seasonYear` - Get constructor standings (Public)
+
+### Legends
+- GET `/api/legends` - Get all legend image overrides (Public)
+- PUT `/api/legends/:legendId` - Update legend images (Admin only)
+
+### F1 Live Data & Predictions
+- GET `/api/f1/schedule` - Get race schedule
+- GET `/api/f1/next-race` - Get next upcoming race
+- GET `/api/f1/standings/drivers/:year?` - Get official driver standings
+- GET `/api/f1/standings/constructors/:year?` - Get official constructor standings
+- GET `/api/f1/predict/:circuitId?year=2026&type=race` - Get race predictions (Public)
+- GET `/api/f1/predict/:circuitId?year=2026&type=qualifying` - Get qualifying predictions (Public)
+- GET `/api/f1/dashboard` - Get compound dashboard data
 
 ## Default Users
 

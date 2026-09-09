@@ -101,4 +101,9 @@ router.get('/dashboard', ctrl.getDashboardSnapshot);
 router.get('/cache/stats',   protect, admin, ctrl.getCacheStats);
 router.post('/cache/clear',  protect, admin, ctrl.clearCache);
 
+// ── Prediction engine ─────────────────────────────────────────────────────────
+// GET /api/f1/predict/:circuitId?year=2026&type=race|qualifying
+const { getPrediction } = require('../controllers/predictionController');
+router.get('/predict/:circuitId', getPrediction);
+
 module.exports = router;

@@ -1,0 +1,18 @@
+# F1 CMS — Robots.txt
+# https://f1-cms.vercel.app/robots.txt
+
+User-agent: *
+Allow: /
+
+# Disallow admin/private routes
+Disallow: /dashboard
+Disallow: /create-post
+Disallow: /edit-post/
+Disallow: /edit-race/
+Disallow: /edit-race-results/
+Disallow: /manage/
+Disallow: /login
+Disallow: /liquid-hero
+Disallow: /liquid-hero-config
+
+Sitemap: https://f1-cms.vercel.app/sitemap.xml

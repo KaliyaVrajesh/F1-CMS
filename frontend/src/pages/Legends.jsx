@@ -4,6 +4,7 @@ import gsap from 'gsap';
 import useAuth from '../hooks/useAuth';
 import { getLegendImages, updateLegendImages as apiUpdateImages } from '../services/api';
 import toast from 'react-hot-toast';
+import SEOHead from '../components/SEOHead';
 
 // ─── Legend data ──────────────────────────────────────────────────────────────
 const DEFAULT_LEGENDS = [
@@ -609,6 +610,11 @@ const Legends = () => {
 
   return (
     <>
+      <SEOHead
+        title="F1 Legends"
+        description="Explore the greatest Formula 1 drivers of all time — Senna, Schumacher, Prost, Lauda, Fangio, and Clark. Career stats, iconic moments, and lasting legacy."
+        canonicalPath="/legends"
+      />
       {editingIdx !== null && (
         <ImageUploadModal
           legend={legends[editingIdx]}

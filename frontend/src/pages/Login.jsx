@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import { login as loginApi, register as registerApi } from '../services/api';
 import useAuth from '../hooks/useAuth';
 import toast from 'react-hot-toast';
+import SEOHead from '../components/SEOHead';
 
 const Login = () => {
   const [isLogin, setIsLogin] = useState(true);
@@ -56,6 +57,7 @@ const Login = () => {
 
   return (
     <div className="flex items-center justify-center min-h-[80vh]">
+      <SEOHead title="Login" description="Sign in to the F1 CMS admin dashboard." canonicalPath="/login" noIndex={true} />
       <motion.div
         initial={{ opacity: 0, scale: 0.9 }}
         animate={{ opacity: 1, scale: 1 }}

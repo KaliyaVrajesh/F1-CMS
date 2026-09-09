@@ -139,4 +139,8 @@ export const getF1LiveCarData   = (sessionKey)    =>
 // Compound dashboard snapshot
 export const getF1Dashboard = () => api.get('/f1/dashboard');
 
+// Prediction engine
+export const getF1Prediction = (circuitId, year, type = 'race') =>
+  api.get(`/f1/predict/${circuitId}`, { params: { year, type } });
+
 export default api;

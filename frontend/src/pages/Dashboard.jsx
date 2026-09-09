@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { getPosts, deletePost } from '../services/api';
 import toast from 'react-hot-toast';
+import SEOHead from '../components/SEOHead';
 
 const Dashboard = () => {
   const [posts, setPosts] = useState([]);
@@ -46,6 +47,7 @@ const Dashboard = () => {
 
   return (
     <div className="max-w-7xl mx-auto">
+      <SEOHead title="Admin Dashboard" description="F1 CMS management dashboard." noIndex={true} />
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}

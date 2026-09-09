@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import { getRaceById, updateRace } from '../services/api';
 import toast from 'react-hot-toast';
 import gsap from 'gsap';
+import SEOHead from '../components/SEOHead';
 
 const EditRace = () => {
   const { id } = useParams();
@@ -118,6 +119,7 @@ const EditRace = () => {
 
   return (
     <div className="max-w-4xl mx-auto">
+      <SEOHead title="Edit Race" description="Edit F1 race details." noIndex={true} />
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
