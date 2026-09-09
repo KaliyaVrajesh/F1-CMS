@@ -296,14 +296,6 @@ const formatTime = (totalSeconds) => {
           nextRaceData={nextRaceData}
           circuitDetails={circuitDetails}
           drivers={drivers}
-          onEnterLiveStream={() => {
-            setIsReplayMode(false);
-            setIsLiveBroadcasting(true);
-            toast.success('Live 2D telemetry connected to OpenF1 stream!');
-          }}
-          onSelectReplay={() => {
-            handleSelectReplay(0);
-          }}
         />
       )}
 
@@ -329,7 +321,7 @@ const formatTime = (totalSeconds) => {
               </span>
             </div>
 
-            {/* Circuit & Replay Selectors */}
+            {/* Circuit Selector */}
             <div className="flex items-center gap-3 flex-wrap">
               <select
                 value={selectedCircuitKey}
@@ -339,18 +331,6 @@ const formatTime = (totalSeconds) => {
                 {OFFICIAL_F1_CALENDAR.map((c) => (
                   <option key={c.key} value={c.key} className="bg-dark-900 text-white">
                     {c.name}
-                  </option>
-                ))}
-              </select>
-
-              <select
-                value={selectedReplayIndex}
-                onChange={(e) => handleSelectReplay(parseInt(e.target.value, 10))}
-                className="px-3 py-1.5 rounded-xl bg-[#090b10] border border-white/15 text-amber-400 font-mono text-xs font-bold focus:outline-none focus:border-amber-400 cursor-pointer shadow-lg"
-              >
-                {HISTORICAL_REPLAYS.map((r, idx) => (
-                  <option key={idx} value={idx} className="bg-dark-900 text-white">
-                    📼 {r.name}
                   </option>
                 ))}
               </select>

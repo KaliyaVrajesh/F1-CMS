@@ -124,9 +124,8 @@ const Navbar = () => {
               onClick={() => playPaddleShift(1.0)}
               onMouseEnter={() => playPaddleShift(1.2)}
             >
-              <span className="w-2 h-2 rounded-full bg-f1red animate-pulse" />
               <AnimatedText
-                text="Live Race"
+                text="Schedule"
                 letterClass="text-gray-300"
                 hoverClass="text-white"
                 totalMs={0.35}
