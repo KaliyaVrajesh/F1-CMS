@@ -64,6 +64,7 @@ export const createSeason = (seasonData) => api.post('/seasons', seasonData);
 
 // Races API
 export const getRaces = () => api.get('/races');
+export const getUpcomingRaces = () => api.get('/races/upcoming');
 export const getRaceById = (id) => api.get(`/races/${id}`);
 export const createRace = (raceData) => api.post('/races', raceData);
 export const updateRace = (id, raceData) => api.put(`/races/${id}`, raceData);

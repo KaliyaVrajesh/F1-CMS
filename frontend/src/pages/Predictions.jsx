@@ -1,35 +1,84 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { getF1Prediction, getF1Schedule } from '../services/api';
+import { getF1Prediction, getUpcomingRaces } from '../services/api';
 import toast from 'react-hot-toast';
 import SEOHead from '../components/SEOHead';
 
-// Circuit ID mapping (Ergast API IDs)
-const CIRCUIT_IDS = {
-  'Bahrain': 'bahrain',
-  'Saudi Arabia': 'jeddah',
-  'Australia': 'albert_park',
-  'Japan': 'suzuka',
-  'China': 'shanghai',
-  'Miami': 'miami',
-  'Imola': 'imola',
-  'Monaco': 'monaco',
-  'Canada': 'villeneuve',
-  'Spain': 'catalunya',
-  'Austria': 'red_bull_ring',
-  'Great Britain': 'silverstone',
-  'Hungary': 'hungaroring',
-  'Belgium': 'spa',
-  'Netherlands': 'zandvoort',
-  'Italy': 'monza',
-  'Azerbaijan': 'baku',
-  'Singapore': 'marina_bay',
-  'United States': 'americas',
-  'Mexico': 'rodriguez',
-  'Brazil': 'interlagos',
-  'Las Vegas': 'vegas',
-  'Qatar': 'losail',
-  'Abu Dhabi': 'yas_marina',
+// Circuit name to Ergast API ID mapping
+const getCircuitId = (circuitName) => {
+  const name = circuitName.toLowerCase().trim();
+  
+  // Direct mappings
+  const mappings = {
+    'bahrain': 'bahrain',
+    'sakhir': 'bahrain',
+    'jeddah': 'jeddah',
+    'saudi': 'jeddah',
+    'saudi arabia': 'jeddah',
+    'albert park': 'albert_park',
+    'melbourne': 'albert_park',
+    'australia': 'albert_park',
+    'suzuka': 'suzuka',
+    'japan': 'suzuka',
+    'shanghai': 'shanghai',
+    'china': 'shanghai',
+    'miami': 'miami',
+    'imola': 'imola',
+    'monaco': 'monaco',
+    'monte carlo': 'monaco',
+    'villeneuve': 'villeneuve',
+    'gilles villeneuve': 'villeneuve',
+    'canada': 'villeneuve',
+    'montreal': 'villeneuve',
+    'catalunya': 'catalunya',
+    'barcelona': 'catalunya',
+    'spain': 'catalunya',
+    'red bull ring': 'red_bull_ring',
+    'austria': 'red_bull_ring',
+    'spielberg': 'red_bull_ring',
+    'silverstone': 'silverstone',
+    'great britain': 'silverstone',
+    'britain': 'silverstone',
+    'uk': 'silverstone',
+    'hungaroring': 'hungaroring',
+    'hungary': 'hungaroring',
+    'budapest': 'hungaroring',
+    'spa': 'spa',
+    'spa-francorchamps': 'spa',
+    'belgium': 'spa',
+    'zandvoort': 'zandvoort',
+    'netherlands': 'zandvoort',
+    'monza': 'monza',
+    'italy': 'monza',
+    'italian': 'monza',
+    'baku': 'baku',
+    'azerbaijan': 'baku',
+    'marina bay': 'marina_bay',
+    'singapore': 'marina_bay',
+    'americas': 'americas',
+    'austin': 'americas',
+    'cota': 'americas',
+    'united states': 'americas',
+    'usa': 'americas',
+    'us': 'americas',
+    'rodriguez': 'rodriguez',
+    'hermanos rodriguez': 'rodriguez',
+    'mexico': 'rodriguez',
+    'mexico city': 'rodriguez',
+    'interlagos': 'interlagos',
+    'brazil': 'interlagos',
+    'sao paulo': 'interlagos',
+    'são paulo': 'interlagos',
+    'vegas': 'vegas',
+    'las vegas': 'vegas',
+    'losail': 'losail',
+    'lusail': 'losail',
+    'qatar': 'losail',
+    'yas marina': 'yas_marina',
+    'abu dhabi': 'yas_marina',
+  };
+  
+  return mappings[name] || null;
 };
 
 // Team colors for visual consistency
@@ -240,39 +289,52 @@ const Predictions = () => {
   const [loading, setLoading] = useState(false);
   const [type, setType] = useState('race'); // 'race' or 'qualifying'
   const [selectedCircuit, setSelectedCircuit] = useState('');
+  const [selectedCircuitDisplay, setSelectedCircuitDisplay] = useState('');
   const [year, setYear] = useState(new Date().getFullYear());
   const [circuits, setCircuits] = useState([]);
 
-  // Load upcoming races from schedule
+  // Load upcoming races from local database
   useEffect(() => {
-    const loadSchedule = async () => {
+    const loadUpcomingRaces = async () => {
       try {
-        const { data } = await getF1Schedule(year);
-        const races = data?.MRData?.RaceTable?.Races || [];
-        const circuitList = races.map((race) => ({
-          name: race.raceName?.replace(' Grand Prix', '') || race.Circuit?.circuitName,
-          location: race.Circuit?.Location?.country,
-          round: race.round,
-          date: race.date,
-        }));
+        const { data } = await getUpcomingRaces();
+        
+        if (!data || data.length === 0) {
+          toast.error('No upcoming races found. Please add future races to predict.');
+          return;
+        }
+        
+        // Map races to circuits with Ergast IDs
+        const circuitList = data
+          .map((race) => {
+            const circuitId = getCircuitId(race.circuit);
+            return circuitId ? {
+              id: circuitId,
+              name: race.name,
+              circuit: race.circuit,
+              location: race.circuitCountry || '',
+              date: race.date,
+              year: new Date(race.date).getFullYear(),
+            } : null;
+          })
+          .filter(Boolean); // Remove null entries
+        
         setCircuits(circuitList);
         
-        // Auto-select next upcoming race
-        const now = new Date();
-        const upcoming = circuitList.find(c => new Date(c.date) >= now);
-        if (upcoming && CIRCUIT_IDS[upcoming.name]) {
-          setSelectedCircuit(CIRCUIT_IDS[upcoming.name]);
-        } else if (circuitList.length > 0 && CIRCUIT_IDS[circuitList[0].name]) {
-          setSelectedCircuit(CIRCUIT_IDS[circuitList[0].name]);
+        // Auto-select the first upcoming race
+        if (circuitList.length > 0) {
+          setSelectedCircuit(circuitList[0].id);
+          setSelectedCircuitDisplay(circuitList[0].circuit);
+          setYear(circuitList[0].year);
         }
       } catch (error) {
-        // Fallback to first available circuit
-        setSelectedCircuit('bahrain');
+        console.error('Error loading upcoming races:', error);
+        toast.error('Failed to load upcoming races');
       }
     };
 
-    loadSchedule();
-  }, [year]);
+    loadUpcomingRaces();
+  }, []);
 
   // Fetch prediction when circuit or type changes
   useEffect(() => {
@@ -284,7 +346,8 @@ const Predictions = () => {
         const { data } = await getF1Prediction(selectedCircuit, year, type);
         setPredictions(data);
       } catch (error) {
-        toast.error('Failed to load prediction. Try another circuit.');
+        console.error('Prediction error:', error);
+        toast.error(error.response?.data?.message || 'Failed to load prediction. This circuit may not have enough historical data.');
       } finally {
         setLoading(false);
       }
@@ -292,10 +355,6 @@ const Predictions = () => {
 
     fetchPrediction();
   }, [selectedCircuit, type, year]);
-
-  const getCircuitDisplayName = (circuitId) => {
-    return Object.keys(CIRCUIT_IDS).find(key => CIRCUIT_IDS[key] === circuitId) || circuitId;
-  };
 
   return (
     <div className="min-h-screen pt-20 pb-12 px-4 md:px-8">
@@ -340,34 +399,36 @@ const Predictions = () => {
               </label>
               <select
                 value={selectedCircuit}
-                onChange={(e) => setSelectedCircuit(e.target.value)}
+                onChange={(e) => {
+                  const circuit = circuits.find(c => c.id === e.target.value);
+                  setSelectedCircuit(e.target.value);
+                  if (circuit) {
+                    setSelectedCircuitDisplay(circuit.circuit);
+                    setYear(circuit.year);
+                  }
+                }}
                 className="w-full px-4 py-2.5 bg-dark-800 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-f1red transition"
               >
-                <option value="">Choose a circuit...</option>
-                {Object.entries(CIRCUIT_IDS).map(([name, id]) => (
-                  <option key={id} value={id}>
-                    {name}
-                  </option>
-                ))}
+                {circuits.length === 0 ? (
+                  <option value="">No upcoming races available</option>
+                ) : (
+                  circuits.map((circuit) => (
+                    <option key={circuit.id} value={circuit.id}>
+                      {circuit.name} - {new Date(circuit.date).toLocaleDateString()}
+                    </option>
+                  ))
+                )}
               </select>
             </div>
 
-            {/* Year Selector */}
+            {/* Year Display (read-only based on selected race) */}
             <div>
               <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">
                 Season
               </label>
-              <select
-                value={year}
-                onChange={(e) => setYear(parseInt(e.target.value))}
-                className="w-full px-4 py-2.5 bg-dark-800 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-f1red transition"
-              >
-                {[2026, 2025, 2024, 2023].map((y) => (
-                  <option key={y} value={y}>
-                    {y}
-                  </option>
-                ))}
-              </select>
+              <div className="w-full px-4 py-2.5 bg-dark-800 border border-gray-700 rounded-lg text-white text-sm">
+                {year}
+              </div>
             </div>
 
             {/* Type Toggle */}
@@ -411,7 +472,7 @@ const Predictions = () => {
                 <div className="text-2xl">📊</div>
                 <div className="text-sm text-gray-300">
                   Analysis based on <strong>{predictions.totalRacesAtCircuit}</strong> historical races at{' '}
-                  <strong>{getCircuitDisplayName(selectedCircuit)}</strong> · Generated{' '}
+                  <strong>{selectedCircuitDisplay || selectedCircuit}</strong> · Generated{' '}
                   {new Date(predictions.generatedAt).toLocaleTimeString()}
                 </div>
               </div>
@@ -470,7 +531,12 @@ const Predictions = () => {
         ) : (
           <div className="text-center py-20">
             <div className="text-6xl mb-4">🏎️</div>
-            <p className="text-gray-400">Select a circuit to view predictions</p>
+            <p className="text-gray-400">
+              {circuits.length === 0 
+                ? 'No upcoming races available for predictions. Add future races in the Admin Dashboard.'
+                : 'Select a circuit to view predictions'
+              }
+            </p>
           </div>
         )}
       </div>

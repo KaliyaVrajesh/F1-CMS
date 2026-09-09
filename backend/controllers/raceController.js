@@ -26,6 +26,19 @@ const getRaces = asyncHandler(async (req, res) => {
 });
 
 /**
+ * @desc    Get upcoming races (future races only)
+ * @route   GET /api/races/upcoming
+ * @access  Public
+ */
+const getUpcomingRaces = asyncHandler(async (req, res) => {
+  const now = new Date();
+  const races = await Race.find({ date: { $gte: now } })
+    .populate('season')
+    .sort({ date: 1 }); // Sort ascending (nearest first)
+  res.json(races);
+});
+
+/**
  * @desc    Create new race
  * @route   POST /api/races
  * @access  Private/Admin
@@ -402,6 +415,7 @@ const updateRace = asyncHandler(async (req, res) => {
 
 module.exports = {
   getRaces,
+  getUpcomingRaces,
   getRaceById,
   createRace,
   updateRace,

@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const {
   getRaces,
+  getUpcomingRaces,
   getRaceById,
   createRace,
   updateRace,
@@ -11,6 +12,7 @@ const {
 const { protect, admin } = require('../middleware/authMiddleware');
 
 router.route('/').get(getRaces).post(protect, admin, createRace);
+router.get('/upcoming', getUpcomingRaces);
 router.route('/:id')
   .get(getRaceById)
   .put(protect, admin, updateRace);
