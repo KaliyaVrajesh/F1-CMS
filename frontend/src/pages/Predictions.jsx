@@ -341,8 +341,9 @@ const WinProbPie = ({ predictions }) => {
         </Pie>
         <Tooltip
           formatter={(value) => [`${value}%`, 'Win chance']}
-          contentStyle={{ background: '#1a1a1a', border: '1px solid #333', borderRadius: 8 }}
-          labelStyle={{ color: '#fff' }}
+          contentStyle={{ background: '#1a1a1a', border: '1px solid #444', borderRadius: 8 }}
+          labelStyle={{ color: '#fff', fontWeight: 'bold' }}
+          itemStyle={{ color: '#ccc' }}
         />
         <Legend
           formatter={(value) => <span style={{ color: '#ccc', fontSize: 11 }}>{value}</span>}
@@ -368,7 +369,9 @@ const FactorWeightsChart = () => {
         <YAxis type="category" dataKey="name" width={110} tick={{ fill: '#aaa', fontSize: 10 }} />
         <Tooltip
           formatter={(v) => [`${v}%`, 'Weight']}
-          contentStyle={{ background: '#1a1a1a', border: '1px solid #333', borderRadius: 8 }}
+          contentStyle={{ background: '#1a1a1a', border: '1px solid #444', borderRadius: 8 }}
+          labelStyle={{ color: '#fff', fontWeight: 'bold' }}
+          itemStyle={{ color: '#ccc' }}
         />
         <Bar dataKey="weight" radius={[0, 4, 4, 0]}>
           {data.map((d, i) => <Cell key={i} fill={d.color} />)}
@@ -399,7 +402,10 @@ const ProbabilityBarChart = ({ predictions, type }) => {
         <YAxis type="category" dataKey="name" width={45} tick={{ fill: '#bbb', fontSize: 11, fontWeight: 'bold' }} />
         <Tooltip
           formatter={(v) => [`${v}%`, type === 'qualifying' ? 'Pole chance' : 'Win chance']}
-          contentStyle={{ background: '#1a1a1a', border: '1px solid #333', borderRadius: 8 }}
+          contentStyle={{ background: '#1a1a1a', border: '1px solid #444', borderRadius: 8 }}
+          labelStyle={{ color: '#fff', fontWeight: 'bold' }}
+          itemStyle={{ color: '#ccc' }}
+          cursor={{ fill: 'rgba(255,255,255,0.05)' }}
         />
         <Bar dataKey="prob" radius={[0, 6, 6, 0]} label={{ position: 'right', fill: '#aaa', fontSize: 10, formatter: v => `${v}%` }}>
           {data.map((d, i) => <Cell key={i} fill={d.color} />)}
