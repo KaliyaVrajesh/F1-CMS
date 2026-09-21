@@ -32,3 +32,18 @@ Thumbs.db
 
 # Docker
 *.log
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+env/
+*.egg-info/
+
+# ML — model binary (large file, regenerate with train_model.py)
+ml/model/f1_prediction_model.pkl
+
+# Kiro internal
+.kiro/

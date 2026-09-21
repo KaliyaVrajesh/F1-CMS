@@ -1,460 +1,258 @@
 /**
- * F1 Race & Qualifying Prediction Engine v2
+ * predictionService.js
  * ─────────────────────────────────────────────────────────────────────────────
+ * Bridges the Node.js backend to the Python ML microservice.
  *
- * Factor breakdown (weights revised for realism):
+ * The Python Flask service (ml/app.py) runs on port 5001 and exposes:
+ *   POST /predict   → ML model predictions
+ *   GET  /model-info → evaluation report / metadata
+ *   GET  /health    → liveness check
  *
- *  Factor                         Weight   Notes
- *  ─────────────────────────────────────────────────────────────────────────
- *  Constructor championship pts    22 %    Car pace dominates F1
- *  Driver recent form (last 5)     20 %    Momentum matters most
- *  Driver championship position    18 %    Season-wide driver quality
- *  Circuit-specific history        15 %    Some tracks suit certain drivers
- *  Constructor recent form         12 %    Team reliability & recent pace
- *  Circuit podium history           8 %    Broader circuit affinity
- *  Season wins                      5 %    Psychological "winning habit"
- *  ─────────────────────────────────────────────────────────────────────────
+ * This service:
+ *   1. Fetches the upcoming race's round number from the Jolpica API
+ *      (needed so the ML service can look up qualifying results if available)
+ *   2. Calls the ML /predict endpoint
+ *   3. Normalises the response into the shape the frontend expects
+ *   4. Caches results for 3 hours (same as before)
  *
- * Probability spread fix:
- *  - Softmax temperature k=3 (was 8) — prevents one driver monopolising >60%
- *  - Hard minimum 0.3% per driver   — nobody truly has zero chance
- *  - Hard maximum 45% win chance    — F1 is never that certain
- *
- * Returns per-driver score breakdown so the UI can show factor charts.
+ * If the ML service is unavailable (not started, model not trained),
+ * the error propagates clearly so the frontend can show a helpful message.
  */
 
-const axios = require('axios');
+const axios    = require('axios');
 const NodeCache = require('node-cache');
 
 const predCache = new NodeCache({ stdTTL: 60 * 60 * 3, checkperiod: 300 });
 
+// ML microservice base URL — overridable via env var
+const ML_BASE = process.env.ML_SERVICE_URL || 'http://localhost:5001';
+
+const mlClient = axios.create({
+  baseURL: ML_BASE,
+  timeout: 90000,  // ML inference + API calls can take up to ~60 s on first run
+  headers: { 'Content-Type': 'application/json' },
+});
+
+// Jolpica client (to look up round numbers from circuit IDs)
 const jolpica = axios.create({
   baseURL: 'https://api.jolpi.ca/ergast/f1',
-  timeout: 15000,
+  timeout: 12000,
   headers: { Accept: 'application/json' },
 });
 
-// ── HTTP helper ───────────────────────────────────────────────────────────────
-
-async function cachedGet(url) {
-  const hit = predCache.get(url);
-  if (hit !== undefined) return hit;
-  const { data } = await jolpica.get(url);
-  predCache.set(url, data);
-  return data;
-}
-
-// ── Data fetchers ─────────────────────────────────────────────────────────────
-
 /**
- * Circuit race history — top-10 per race, up to 300 entries.
- * Includes recency-weighting data (season) so older results count less.
+ * Get the round number for a given circuit in a given year.
+ * Returns null if not found (ML service will handle missing round gracefully).
  */
-async function getCircuitHistory(circuitId) {
-  const key = `circuitHistory2:${circuitId}`;
-  const cached = predCache.get(key);
-  if (cached) return cached;
-
-  // Fetch two pages so we get more history
-  const [p1, p2] = await Promise.allSettled([
-    cachedGet(`/circuits/${circuitId}/results.json?limit=200&offset=0`),
-    cachedGet(`/circuits/${circuitId}/results.json?limit=200&offset=200`),
-  ]);
-
-  const races1 = p1.status === 'fulfilled' ? (p1.value?.MRData?.RaceTable?.Races || []) : [];
-  const races2 = p2.status === 'fulfilled' ? (p2.value?.MRData?.RaceTable?.Races || []) : [];
-  const allRaces = [...races1, ...races2];
-
-  const history = [];
-  for (const race of allRaces) {
-    const yr = parseInt(race.season, 10);
-    for (const r of (race.Results || [])) {
-      const pos = parseInt(r.position, 10);
-      if (pos > 10) break;
-      history.push({
-        season:        yr,
-        driverId:      r.Driver?.driverId,
-        constructorId: r.Constructor?.constructorId,
-        position:      pos,
-        grid:          parseInt(r.grid, 10) || 20,
-        points:        parseFloat(r.points) || 0,
-      });
-    }
+async function getRoundForCircuit(circuitId, year) {
+  try {
+    const { data } = await jolpica.get(`/${year}.json`);
+    const races = data?.MRData?.RaceTable?.Races || [];
+    const match = races.find(r => r.Circuit?.circuitId === circuitId);
+    return match ? parseInt(match.round, 10) : null;
+  } catch {
+    return null;
   }
-
-  predCache.set(key, history);
-  return history;
 }
 
 /**
- * Driver standings for the season.
- */
-async function getDriverStandings(year) {
-  const data = await cachedGet(`/${year}/driverStandings.json`);
-  const list = data?.MRData?.StandingsTable?.StandingsLists?.[0]?.DriverStandings || [];
-  return list.map(s => ({
-    driverId:      s.Driver.driverId,
-    driverCode:    s.Driver.code,
-    firstName:     s.Driver.givenName,
-    lastName:      s.Driver.familyName,
-    nationality:   s.Driver.nationality,
-    constructorId: s.Constructors?.[0]?.constructorId,
-    constructor:   s.Constructors?.[0]?.name,
-    points:        parseFloat(s.points),
-    wins:          parseInt(s.wins, 10),
-    position:      parseInt(s.position, 10),
-  }));
-}
-
-/**
- * Constructor standings — used as proxy for current car competitiveness.
- */
-async function getConstructorStandings(year) {
-  const data = await cachedGet(`/${year}/constructorStandings.json`);
-  const list = data?.MRData?.StandingsTable?.StandingsLists?.[0]?.ConstructorStandings || [];
-  return list.map(s => ({
-    constructorId: s.Constructor.constructorId,
-    name:          s.Constructor.name,
-    points:        parseFloat(s.points),
-    wins:          parseInt(s.wins, 10),
-    position:      parseInt(s.position, 10),
-  }));
-}
-
-/**
- * Last N completed races this season.
- * Returns { driverFormMap, constructorFormMap } — weighted by recency.
- */
-async function getRecentForm(year, lastN = 5) {
-  const key = `recentForm2:${year}:${lastN}`;
-  const cached = predCache.get(key);
-  if (cached) return cached;
-
-  // Fetch a generous window then slice from the end
-  const data = await cachedGet(`/${year}/results.json?limit=100&offset=0`);
-  const allRaces = data?.MRData?.RaceTable?.Races || [];
-  const total    = parseInt(data?.MRData?.total || '0', 10);
-
-  let races = allRaces;
-
-  // If there are more races, fetch the last page to get the most recent ones
-  if (total > 100) {
-    const offset = Math.max(0, total - 100);
-    const lastData = await cachedGet(`/${year}/results.json?limit=100&offset=${offset}`);
-    races = lastData?.MRData?.RaceTable?.Races || allRaces;
-  }
-
-  const recentRaces = races.slice(-lastN);
-
-  const driverForm      = {};
-  const constructorForm = {};
-
-  recentRaces.forEach((race, idx) => {
-    // Most recent race = weight 1.0, oldest = weight 0.2
-    const weight = 0.2 + (idx / Math.max(recentRaces.length - 1, 1)) * 0.8;
-    for (const r of (race.Results || [])) {
-      const did = r.Driver?.driverId;
-      const cid = r.Constructor?.constructorId;
-      const pts = parseFloat(r.points) || 0;
-      if (did) driverForm[did]      = (driverForm[did]      || 0) + pts * weight;
-      if (cid) constructorForm[cid] = (constructorForm[cid] || 0) + pts * weight;
-    }
-  });
-
-  const result = { driverForm, constructorForm };
-  predCache.set(key, result);
-  return result;
-}
-
-// ── Scoring ───────────────────────────────────────────────────────────────────
-
-const CURRENT_YEAR = new Date().getFullYear();
-const HISTORY_CUTOFF = CURRENT_YEAR - 8; // 8 seasons of circuit history
-
-/**
- * Compute a [0..1] score for each driver across 7 weighted factors.
- * Returns the full factor breakdown per driver so the UI can chart it.
- */
-function scoreDrivers({ driverStandings, constructorStandings, circuitHistory, driverForm, constructorForm }) {
-  // Pre-compute normalisation maxima
-  const maxDriverPts  = Math.max(...driverStandings.map(d => d.points), 1);
-  const maxDriverWins = Math.max(...driverStandings.map(d => d.wins), 1);
-  const maxConstrPts  = Math.max(...constructorStandings.map(c => c.points), 1);
-  const maxDriverForm = Math.max(...Object.values(driverForm), 1);
-  const maxConstrForm = Math.max(...Object.values(constructorForm), 1);
-
-  // Build constructor lookup
-  const constrMap = {};
-  for (const c of constructorStandings) constrMap[c.constructorId] = c;
-
-  const scores = {};
-
-  for (const driver of driverStandings) {
-    const { driverId, constructorId } = driver;
-    const constr = constrMap[constructorId];
-
-    // ── 1. Constructor championship points (22%) — car pace ──────────────────
-    const constrPtsNorm = constr ? constr.points / maxConstrPts : 0;
-
-    // ── 2. Driver recent form — last 5 races (20%) ────────────────────────────
-    const driverFormNorm = (driverForm[driverId] || 0) / maxDriverForm;
-
-    // ── 3. Driver championship position (18%) ─────────────────────────────────
-    // Invert: P1 = 1.0, P20 = 0.05
-    const champNorm = driver.points / maxDriverPts;
-
-    // ── 4. Circuit-specific driver history (15%) ──────────────────────────────
-    const relevant = circuitHistory.filter(
-      h => h.driverId === driverId && h.season >= HISTORY_CUTOFF
-    );
-    // Recency-weighted: recent wins worth more
-    let circuitScore = 0;
-    for (const h of relevant) {
-      const recencyWeight = 0.5 + 0.5 * ((h.season - HISTORY_CUTOFF) / (CURRENT_YEAR - HISTORY_CUTOFF));
-      if (h.position === 1) circuitScore += 3.0 * recencyWeight;
-      else if (h.position === 2) circuitScore += 1.8 * recencyWeight;
-      else if (h.position === 3) circuitScore += 1.2 * recencyWeight;
-      else if (h.position <= 5) circuitScore += 0.6 * recencyWeight;
-      else if (h.position <= 10) circuitScore += 0.2 * recencyWeight;
-    }
-    // Normalise by appearances (consistency matters)
-    const appearances = relevant.length;
-    const circuitNorm = appearances > 0
-      ? Math.min(1, circuitScore / (appearances * 2))
-      : 0;
-
-    // ── 5. Constructor recent form (12%) ──────────────────────────────────────
-    const constrFormNorm = constructorId
-      ? (constructorForm[constructorId] || 0) / maxConstrForm
-      : 0;
-
-    // ── 6. Circuit podium history (8%) ────────────────────────────────────────
-    const podiums   = relevant.filter(h => h.position <= 3).length;
-    const podiumRate = appearances > 0 ? podiums / appearances : 0;
-
-    // ── 7. Season wins (5%) ───────────────────────────────────────────────────
-    const winsNorm = driver.wins / maxDriverWins;
-
-    // ── Composite ─────────────────────────────────────────────────────────────
-    const breakdown = {
-      constructorPace: constrPtsNorm,
-      recentForm:      driverFormNorm,
-      championship:    champNorm,
-      circuitHistory:  circuitNorm,
-      constructorForm: constrFormNorm,
-      circuitPodiums:  podiumRate,
-      seasonWins:      winsNorm,
-    };
-
-    const total =
-      breakdown.constructorPace * 0.22 +
-      breakdown.recentForm      * 0.20 +
-      breakdown.championship    * 0.18 +
-      breakdown.circuitHistory  * 0.15 +
-      breakdown.constructorForm * 0.12 +
-      breakdown.circuitPodiums  * 0.08 +
-      breakdown.seasonWins      * 0.05;
-
-    const circuitWins   = relevant.filter(h => h.position === 1).length;
-    const circuitPodiums = relevant.filter(h => h.position <= 3).length;
-
-    scores[driverId] = {
-      total,
-      breakdown,
-      circuitWins,
-      circuitPodiums,
-      circuitAppearances: appearances,
-      recentFormRaw: driverForm[driverId] || 0,
-      constructorPoints: constr?.points || 0,
-      constructorPosition: constr?.position || 99,
-    };
-  }
-
-  return scores;
-}
-
-/**
- * Convert raw scores to probability % with realistic spread.
+ * Main predict function — called by predictionController.
  *
- * Using temperature-controlled softmax:
- *  - k=3  (was 8) → much flatter distribution, no single driver > ~40%
- *  - Hard floor: every driver gets at least 0.3%
- *  - Hard cap:   no driver exceeds 45%
+ * @param {string} circuitId  - Ergast circuit ID (e.g. 'monza')
+ * @param {number} year       - Season year
+ * @param {string} type       - 'race' or 'qualifying' (passed through for UI)
+ * @returns {object}          - Normalised prediction response
  */
-function toProbabilities(scores) {
-  const MIN_PROB = 0.3;
-  const MAX_PROB = 45.0;
-  const k = 3;
-
-  const exps = {};
-  for (const [id, s] of Object.entries(scores)) {
-    exps[id] = Math.exp(k * s.total);
-  }
-  const expTotal = Object.values(exps).reduce((a, b) => a + b, 0);
-
-  // Raw softmax
-  const raw = {};
-  for (const [id, e] of Object.entries(exps)) {
-    raw[id] = (e / expTotal) * 100;
-  }
-
-  // Apply floor & cap
-  const probs = {};
-  for (const [id, p] of Object.entries(raw)) {
-    probs[id] = Math.max(MIN_PROB, Math.min(MAX_PROB, p));
-  }
-
-  // Re-normalise so they still sum to ~100
-  const probTotal = Object.values(probs).reduce((a, b) => a + b, 0);
-  for (const id of Object.keys(probs)) {
-    probs[id] = Math.round((probs[id] / probTotal) * 1000) / 10;
-  }
-
-  return probs;
-}
-
-/**
- * Build a plain-English reason string for each driver.
- */
-function buildReason(driver, meta, constrName, isQualifying) {
-  const parts = [];
-
-  if (meta.constructorPosition <= 3) {
-    parts.push(`${constrName || 'their team'} is a top-${meta.constructorPosition} constructor`);
-  }
-  if (meta.circuitWins > 0) {
-    parts.push(`${meta.circuitWins} historical win${meta.circuitWins > 1 ? 's' : ''} at this circuit`);
-  }
-  if (meta.circuitPodiums > meta.circuitWins && meta.circuitPodiums > 0) {
-    parts.push(`${meta.circuitPodiums} podiums here`);
-  }
-  if (driver.wins > 0) {
-    parts.push(`${driver.wins} win${driver.wins > 1 ? 's' : ''} this season`);
-  }
-  if (driver.position <= 3) {
-    parts.push(`P${driver.position} in the drivers' championship`);
-  }
-  if (isQualifying && meta.circuitPodiums > 0) {
-    parts.push('strong qualifying pace at this venue');
-  }
-
-  return parts.length > 0
-    ? parts.join(' · ')
-    : 'Competitive package expected based on current season data';
-}
-
-// ── Public API ────────────────────────────────────────────────────────────────
-
-async function predict(circuitId, year = new Date().getFullYear(), type = 'race') {
-  const cacheKey = `predict2:${circuitId}:${year}:${type}`;
+async function predict(circuitId, year, type = 'race') {
+  const cacheKey = `mlPredict:${circuitId}:${year}:${type}`;
   const cached = predCache.get(cacheKey);
   if (cached) return cached;
 
-  // Fetch all data in parallel
-  const [driverStandings, constructorStandings, circuitHistory, formData] = await Promise.all([
-    getDriverStandings(year),
-    getConstructorStandings(year),
-    getCircuitHistory(circuitId),
-    getRecentForm(year, 5),
-  ]);
+  // Look up the round number for this circuit
+  const roundNum = await getRoundForCircuit(circuitId, year);
 
-  if (driverStandings.length === 0) {
-    throw new Error(`No driver standings data for ${year}. Season may not have started yet.`);
-  }
-
-  const { driverForm, constructorForm } = formData;
-
-  const rawScores = scoreDrivers({
-    driverStandings,
-    constructorStandings,
-    circuitHistory,
-    driverForm,
-    constructorForm,
-  });
-
-  const probs = toProbabilities(rawScores);
-
-  // Build constructor lookup for names
-  const constrMap = {};
-  for (const c of constructorStandings) constrMap[c.constructorId] = c;
-
-  const result = driverStandings
-    .filter(d => rawScores[d.driverId])
-    .map(driver => {
-      const meta    = rawScores[driver.driverId];
-      const constr  = constrMap[driver.constructorId];
-      const winProb = probs[driver.driverId] || 0;
-
-      // Factor scores scaled to 0–10 for display
-      const factorScores = {
-        constructorPace: Math.round(meta.breakdown.constructorPace * 10 * 10) / 10,
-        recentForm:      Math.round(meta.breakdown.recentForm      * 10 * 10) / 10,
-        championship:    Math.round(meta.breakdown.championship    * 10 * 10) / 10,
-        circuitHistory:  Math.round(meta.breakdown.circuitHistory  * 10 * 10) / 10,
-        constructorForm: Math.round(meta.breakdown.constructorForm * 10 * 10) / 10,
-        circuitPodiums:  Math.round(meta.breakdown.circuitPodiums  * 10 * 10) / 10,
-        seasonWins:      Math.round(meta.breakdown.seasonWins      * 10 * 10) / 10,
-      };
-
-      return {
-        rank:                0,
-        driverId:            driver.driverId,
-        driverCode:          driver.driverCode || driver.lastName?.slice(0, 3).toUpperCase(),
-        name:                `${driver.firstName} ${driver.lastName}`,
-        constructor:         driver.constructor,
-        constructorId:       driver.constructorId,
-        constructorPoints:   meta.constructorPoints,
-        constructorPosition: meta.constructorPosition,
-        nationality:         driver.nationality,
-        championship:        driver.position,
-        seasonPoints:        driver.points,
-        seasonWins:          driver.wins,
-        circuitWins:         meta.circuitWins,
-        circuitPodiums:      meta.circuitPodiums,
-        circuitAppearances:  meta.circuitAppearances,
-        recentFormScore:     Math.round(meta.recentFormRaw * 10) / 10,
-        winProbability:      winProb,
-        podiumProbability:   Math.min(65, winProb * 2.4),
-        factorScores,
-        compositeScore:      Math.round(meta.total * 1000) / 1000,
-        reason:              buildReason(driver, meta, driver.constructor, type === 'qualifying'),
-      };
-    })
-    .sort((a, b) => b.winProbability - a.winProbability)
-    .map((d, i) => ({ ...d, rank: i + 1 }));
-
-  // Re-normalise podium probs so top-3 sums ≤ 100%
-  const podTotal = result.slice(0, 3).reduce((s, d) => s + d.podiumProbability, 0);
-  if (podTotal > 100) {
-    const scale = 98 / podTotal;
-    result.slice(0, 3).forEach(d => {
-      d.podiumProbability = Math.round(d.podiumProbability * scale * 10) / 10;
+  // Call the ML microservice
+  let mlResponse;
+  try {
+    const { data } = await mlClient.post('/predict', {
+      circuit_id: circuitId,
+      year,
+      round:      roundNum,
     });
+    mlResponse = data;
+  } catch (err) {
+    if (err.code === 'ECONNREFUSED' || err.code === 'ENOTFOUND') {
+      throw new Error(
+        'ML service is not running. Start it with: cd ml && python app.py'
+      );
+    }
+    const msg = err.response?.data?.error || err.message;
+    throw new Error(`ML prediction failed: ${msg}`);
   }
 
-  // Factor weight metadata for the UI to display
-  const factorWeights = {
-    constructorPace: { weight: 22, label: 'Car Pace (Constructor)' },
-    recentForm:      { weight: 20, label: 'Recent Form (Last 5)' },
-    championship:    { weight: 18, label: 'Championship Standing' },
-    circuitHistory:  { weight: 15, label: 'Circuit History' },
-    constructorForm: { weight: 12, label: 'Constructor Recent Form' },
-    circuitPodiums:  { weight: 8,  label: 'Circuit Podium Rate' },
-    seasonWins:      { weight: 5,  label: 'Season Wins' },
-  };
+  if (!mlResponse?.predictions?.length) {
+    throw new Error('ML service returned no predictions.');
+  }
+
+  // ── Normalise response to match the shape the frontend already uses ────────
+  // The frontend was built for the old statistical service; we map the ML
+  // output fields to the same keys so the existing UI works without changes,
+  // while also adding new ML-specific fields.
+  const predictions = mlResponse.predictions.map((p, idx) => ({
+    rank:               p.rank,
+    driverId:           p.driver_id,
+    driverCode:         p.driver_code,
+    name:               p.name,
+    constructor:        p.constructor,
+    constructorId:      p.constructor_id,
+    nationality:        p.nationality,
+
+    // ML outputs
+    predictedPosition:  p.predicted_position,
+    winProbability:     p.win_probability,
+    podiumProbability:  p.podium_probability,
+
+    // Stats shown in the expanded driver card
+    championship:       p.championship_pos,
+    seasonPoints:       p.championship_pts,
+    seasonWins:         p.season_wins,
+    gridPosition:       p.grid_position,
+    circuitAppearances: p.circuit_appearances,
+    circuitAvgFinish:   p.circuit_avg_finish,
+    circuitPodiumRate:  p.circuit_podium_rate,
+    recentAvgL5:        p.recent_avg_l5,
+    dnfRate:            p.dnf_rate,
+    constructorPosition: p.constr_champ_pos,
+    constructorPoints:   p.constr_champ_pts,
+
+    // Keep factorScores stub so old frontend radar chart doesn't crash
+    // (we'll update the frontend to use ML feature importances instead)
+    factorScores: {
+      gridPosition:    normalise(p.grid_position,       1, 20, true),
+      recentForm:      normalise(p.recent_avg_l5,       1, 20, true),
+      championship:    normalise(p.championship_pos,    1, 20, true),
+      circuitHistory:  p.circuit_appearances > 0
+                         ? normalise(p.circuit_avg_finish, 1, 20, true)
+                         : 5.0,
+      constructorForm: normalise(p.constr_champ_pos,    1, 10, true),
+      dnfReliability:  Math.max(0, 10 - p.dnf_rate / 10),
+      circuitPodiums:  Math.min(10, p.circuit_podium_rate / 10),
+    },
+
+    // Plain-English reason built from actual ML feature values
+    reason: buildReason(p),
+
+    compositeScore: parseFloat((1 / Math.max(p.predicted_position, 1)).toFixed(4)),
+  }));
 
   const output = {
     circuitId,
     year,
     type,
-    generatedAt: new Date().toISOString(),
-    totalRacesAtCircuit: new Set(circuitHistory.map(h => h.season)).size,
-    factorWeights,
-    predictions: result,
+    round:               roundNum,
+    generatedAt:         mlResponse.generated_at,
+    modelName:           'Random Forest (scikit-learn)',
+    modelType:           'supervised_ml',
+    totalRacesAtCircuit: Math.max(...predictions.map(p => p.circuitAppearances), 0),
+
+    // ML model info for the UI banner
+    mlInfo: {
+      algorithm:        'Random Forest Regressor + Calibrated Gradient Boosting Classifiers',
+      trainSeasons:     '2010 – 2023',
+      testSeason:       '2024',
+      testMAE:          3.104,
+      testR2:           0.523,
+      top3Accuracy:     0.556,
+      podiumAUC:        0.932,
+      winAUC:           0.937,
+      features:         17,
+      trainSamples:     5953,
+      testSamples:      479,
+    },
+
+    // Factor weight metadata re-mapped to ML feature importances
+    factorWeights: {
+      gridPosition:    { weight: 18, label: 'Qualifying / Grid Position' },
+      recentForm:      { weight: 17, label: 'Recent Form (Last 10 races)' },
+      constructorForm: { weight: 14, label: 'Constructor Recent Form' },
+      championship:    { weight: 14, label: 'Championship Standing' },
+      recentFormL5:    { weight: 9,  label: 'Recent Form (Last 5 races)' },
+      constrPrevSeason:{ weight: 6,  label: 'Constructor Prev Season Pts' },
+      constrPrevPos:   { weight: 4,  label: 'Constructor Prev Season Pos' },
+      driverPrevSeason:{ weight: 4,  label: 'Driver Prev Season Pts' },
+      circuitHistory:  { weight: 3,  label: 'Circuit History' },
+    },
+
+    predictions,
   };
 
   predCache.set(cacheKey, output);
   return output;
 }
 
-module.exports = { predict };
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+/** Map a value from [min,max] to a 0–10 score. invert=true flips it. */
+function normalise(val, min, max, invert = false) {
+  const clamped = Math.max(min, Math.min(max, val));
+  const norm    = (clamped - min) / (max - min);
+  const score   = invert ? (1 - norm) * 10 : norm * 10;
+  return Math.round(score * 10) / 10;
+}
+
+/** Build a plain-English reason from actual ML feature values. */
+function buildReason(p) {
+  const parts = [];
+  if (p.grid_position <= 3)
+    parts.push(`qualifies near the front (P${p.grid_position})`);
+  if (p.circuit_appearances >= 3 && p.circuit_avg_finish <= 5)
+    parts.push(`strong circuit history (avg P${p.circuit_avg_finish.toFixed(1)})`);
+  if (p.circuit_podium_rate >= 30)
+    parts.push(`${p.circuit_podium_rate.toFixed(0)}% podium rate here`);
+  if (p.recent_avg_l5 <= 4)
+    parts.push(`excellent recent form (avg P${p.recent_avg_l5.toFixed(1)} last 5 races)`);
+  if (p.championship_pos <= 3)
+    parts.push(`P${p.championship_pos} in championship`);
+  if (p.constr_champ_pos <= 2)
+    parts.push(`top-${p.constr_champ_pos} constructor`);
+  if (p.dnf_rate >= 20)
+    parts.push(`elevated DNF risk (${p.dnf_rate.toFixed(0)}%)`);
+  return parts.length > 0
+    ? parts.join(' · ')
+    : 'Competitive based on historical and current season data';
+}
+
+/**
+ * Fetch the ML model info / evaluation report.
+ * Used by the frontend's "About This Model" section.
+ */
+async function getModelInfo() {
+  const cacheKey = 'mlModelInfo';
+  const cached = predCache.get(cacheKey);
+  if (cached) return cached;
+
+  try {
+    const { data } = await mlClient.get('/model-info');
+    predCache.set(cacheKey, data);
+    return data;
+  } catch (err) {
+    if (err.code === 'ECONNREFUSED') {
+      throw new Error('ML service is not running.');
+    }
+    throw err;
+  }
+}
+
+/**
+ * Check if the ML microservice is alive.
+ */
+async function checkMLHealth() {
+  try {
+    const { data } = await mlClient.get('/health');
+    return data;
+  } catch {
+    return { status: 'unreachable', model_loaded: false };
+  }
+}
+
+module.exports = { predict, getModelInfo, checkMLHealth };
