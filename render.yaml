@@ -1,0 +1,28 @@
+services:
+  # ── ML Python microservice ──────────────────────────────────────────────────
+  - type: web
+    name: f1cms-ml
+    runtime: python
+    rootDir: ml
+    buildCommand: pip install -r requirements.txt
+    startCommand: python app.py
+    plan: free
+    # No ML_PORT needed — Render injects $PORT automatically
+
+  # ── Node.js backend ─────────────────────────────────────────────────────────
+  - type: web
+    name: f1cms-backend
+    runtime: node
+    rootDir: backend
+    buildCommand: npm install
+    startCommand: node server.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: MONGO_URI
+        sync: false    # Set this manually in the Render dashboard (contains credentials)
+      - key: JWT_SECRET
+        sync: false    # Set this manually in the Render dashboard
+      - key: ML_SERVICE_URL
+        sync: false    # Set to: https://f1cms-ml.onrender.com  (after f1cms-ml is deployed)
+    plan: free

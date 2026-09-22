@@ -1,0 +1,22 @@
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# Training / data files — not needed at runtime
+data/
+data_collection.py
+feature_engineering.py
+train_model.py
+ML_DOCUMENTATION.md
+
+# Dev/test artifacts
+*.ipynb
+.ipynb_checkpoints/
