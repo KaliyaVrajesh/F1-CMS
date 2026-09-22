@@ -1,4 +1,4 @@
-# Dependencies
+﻿# Dependencies
 node_modules/
 */node_modules/
 
@@ -42,8 +42,7 @@ venv/
 env/
 *.egg-info/
 
-# ML — model binary (large file, regenerate with train_model.py)
-ml/model/f1_prediction_model.pkl
+# ML model binary tracked in git so Render can deploy without retraining
 
 # Kiro internal
 .kiro/
