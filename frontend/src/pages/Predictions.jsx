@@ -27,18 +27,26 @@ const TEAM_COLORS = {
 const getTeamColor = (cid) =>
   TEAM_COLORS[cid?.toLowerCase().replace(/[-\s]/g, '_')] || '#888';
 
-// ── ML Feature metadata (mapped from model's feature importances) ─────────────
-const FEATURE_META = {
-  gridPosition:    { label: 'Grid Position',        color: '#E8002D', importance: 17.9 },
-  recentForm:      { label: 'Recent Form (L10)',     color: '#FF8000', importance: 16.6 },
-  constructorForm: { label: 'Constructor Form',      color: '#27F4D2', importance: 14.2 },
-  championship:    { label: 'Championship Standing', color: '#FFD700', importance: 13.6 },
-  recentFormL5:    { label: 'Recent Form (L5)',      color: '#229971', importance:  8.7 },
-  constrPrevSeason:{ label: 'Constr Prev Season',    color: '#FF87BC', importance:  5.6 },
-  constrPrevPos:   { label: 'Constr Prev Pos',       color: '#64C4FF', importance:  3.8 },
-  driverPrevSeason:{ label: 'Driver Prev Season',    color: '#9B59B6', importance:  3.6 },
-  circuitHistory:  { label: 'Circuit History',       color: '#E67E22', importance:  2.7 },
-};
+// ── ML Feature metadata — all 17 features, importances from evaluation_report.json ──
+const FEATURE_META = [
+  { label: 'Qualifying Position',        color: '#E8002D', importance: 17.9 },
+  { label: 'Avg Finish (Last 10 Races)', color: '#FF8000', importance: 16.6 },
+  { label: 'Constructor Avg Finish (L5)',color: '#27F4D2', importance: 14.2 },
+  { label: 'Grid Position',              color: '#FFD700', importance: 13.6 },
+  { label: 'Avg Finish (Last 5 Races)',  color: '#229971', importance:  8.7 },
+  { label: 'Constr Prev Season Points',  color: '#FF87BC', importance:  5.6 },
+  { label: 'Constr Prev Season Pos',     color: '#64C4FF', importance:  3.8 },
+  { label: 'Driver Prev Season Points',  color: '#9B59B6', importance:  3.6 },
+  { label: 'Season Round',               color: '#F39C12', importance:  2.7 },
+  { label: 'Circuit Avg Finish',         color: '#1ABC9C', importance:  2.6 },
+  { label: 'Driver Prev Season Pos',     color: '#3498DB', importance:  2.1 },
+  { label: 'Season Year',                color: '#8E44AD', importance:  2.1 },
+  { label: 'Constr Prev Season Wins',    color: '#E74C3C', importance:  1.6 },
+  { label: 'Circuit Appearances',        color: '#2ECC71', importance:  1.4 },
+  { label: 'Driver DNF Rate (L10)',      color: '#E67E22', importance:  1.4 },
+  { label: 'Driver Prev Season Wins',    color: '#EC407A', importance:  1.1 },
+  { label: 'Circuit Podium Rate',        color: '#00BCD4', importance:  1.0 },
+];
 
 // ── ML model stats (from actual training run) ─────────────────────────────────
 const ML_STATS = {
@@ -383,20 +391,23 @@ const ProbabilityBarChart = ({ predictions, type }) => {
 
 // ── Feature importances bar chart ─────────────────────────────────────────────
 const FeatureImportancesChart = () => {
-  const data = Object.entries(FEATURE_META)
-    .sort((a, b) => b[1].importance - a[1].importance)
-    .map(([, m]) => ({ name: m.label, importance: m.importance, color: m.color }));
+  const data = [...FEATURE_META].sort((a, b) => b.importance - a.importance);
   return (
-    <ResponsiveContainer width="100%" height={240}>
-      <BarChart data={data} layout="vertical" margin={{ left: 10, right: 40 }}>
-        <XAxis type="number" domain={[0, 20]} tick={{ fill: '#666', fontSize: 10 }}
-          tickFormatter={v => `${v}%`} />
-        <YAxis type="category" dataKey="name" width={130}
-          tick={{ fill: '#aaa', fontSize: 9 }} />
-        <Tooltip formatter={(v) => [`${v.toFixed(1)}%`, 'Feature Importance']}
-          contentStyle={{ background: '#1a1a1a', border: '1px solid #444', borderRadius: 8 }}
-          labelStyle={{ color: '#fff', fontWeight: 'bold' }} itemStyle={{ color: '#ccc' }} />
-        <Bar dataKey="importance" radius={[0, 4, 4, 0]}>
+    <ResponsiveContainer width="100%" height={440}>
+      <BarChart data={data} layout="vertical" margin={{ left: 8, right: 48, top: 4, bottom: 4 }}>
+        <XAxis type="number" domain={[0, 20]} tick={{ fill: '#555', fontSize: 10 }}
+          tickFormatter={v => `${v}%`} axisLine={false} tickLine={false} />
+        <YAxis type="category" dataKey="label" width={190}
+          tick={{ fill: '#bbb', fontSize: 10.5 }} axisLine={false} tickLine={false} />
+        <Tooltip
+          formatter={(v) => [`${v.toFixed(1)}%`, 'Importance']}
+          contentStyle={{ background: '#1a1a1a', border: '1px solid #333', borderRadius: 8 }}
+          labelStyle={{ color: '#fff', fontWeight: 'bold', fontSize: 12 }}
+          itemStyle={{ color: '#ccc' }}
+          cursor={{ fill: 'rgba(255,255,255,0.04)' }}
+        />
+        <Bar dataKey="importance" radius={[0, 5, 5, 0]} barSize={14}
+          label={{ position: 'right', fill: '#666', fontSize: 10, formatter: v => `${v.toFixed(1)}%` }}>
           {data.map((d, i) => <Cell key={i} fill={d.color} />)}
         </Bar>
       </BarChart>
