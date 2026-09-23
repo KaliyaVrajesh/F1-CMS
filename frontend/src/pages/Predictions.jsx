@@ -429,6 +429,8 @@ const Predictions = () => {
   const [circuits, setCircuits]                     = useState([]);
   const [activeTab, setActiveTab]                   = useState('grid');
   const [mlError, setMlError]                       = useState(null);
+  const [waking, setWaking]                         = useState(false);
+  const [retryKey, setRetryKey]                     = useState(0);
 
   // ── Load schedule ───────────────────────────────────────────────────────────
   useEffect(() => {
@@ -465,28 +467,61 @@ const Predictions = () => {
   // ── Fetch ML prediction ─────────────────────────────────────────────────────
   useEffect(() => {
     if (!selectedCircuit) return;
+    let cancelled = false;
+
     const run = async () => {
       setLoading(true);
       setPredictions(null);
       setMlError(null);
-      try {
-        const { data } = await getF1Prediction(selectedCircuit, predYear, type);
-        setPredictions(data);
-      } catch (err) {
-        console.error('Prediction error:', err);
-        const msg = err.response?.data?.message || err.response?.data?.error || err.message;
-        setMlError(msg);
-        if (msg?.includes('ML service')) {
-          toast.error('ML service not running. Start it with: cd ml && python app.py', { duration: 6000 });
-        } else {
-          toast.error('Prediction failed — ' + msg);
+      setWaking(false);
+
+      const MAX_RETRIES = 3;
+      const RETRY_DELAY = 8000; // 8 s between retries — gives cold-start time
+
+      for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+        try {
+          const { data } = await getF1Prediction(selectedCircuit, predYear, type);
+          if (cancelled) return;
+          setPredictions(data);
+          setWaking(false);
+          setLoading(false);
+          return;
+        } catch (err) {
+          if (cancelled) return;
+          const status = err.response?.status;
+          const isTransient = !status || status === 502 || status === 503 || status === 504;
+
+          if (isTransient && attempt < MAX_RETRIES) {
+            // Service is cold-starting — show waking state and retry
+            setWaking(true);
+            toast.loading(
+              `ML service is waking up… (attempt ${attempt}/${MAX_RETRIES})`,
+              { id: 'ml-wake', duration: RETRY_DELAY }
+            );
+            await new Promise(r => setTimeout(r, RETRY_DELAY));
+            continue;
+          }
+
+          // Final failure — show a helpful, production-appropriate message
+          toast.dismiss('ml-wake');
+          const serverMsg = err.response?.data?.message || err.response?.data?.error;
+          let displayMsg;
+          if (!status || status === 502 || status === 503 || status === 504) {
+            displayMsg = 'The prediction service is temporarily unavailable. It may be starting up — please try again in a moment.';
+          } else {
+            displayMsg = serverMsg || err.message;
+          }
+          setMlError(displayMsg);
+          setWaking(false);
+          toast.error('Prediction unavailable — try again in a few seconds.', { duration: 5000 });
         }
-      } finally {
-        setLoading(false);
       }
+      setLoading(false);
     };
+
     run();
-  }, [selectedCircuit, type, predYear]);
+    return () => { cancelled = true; toast.dismiss('ml-wake'); };
+  }, [selectedCircuit, type, predYear, retryKey]);
 
   // ── Render ──────────────────────────────────────────────────────────────────
   return (
@@ -612,14 +647,16 @@ const Predictions = () => {
             className="rounded-2xl p-6 mb-6 border border-yellow-500/30 bg-yellow-500/10">
             <div className="flex items-start gap-3">
               <span className="text-2xl">⚠️</span>
-              <div>
-                <h3 className="font-bold text-yellow-400 mb-1">ML Service Unavailable</h3>
+              <div className="flex-1">
+                <h3 className="font-bold text-yellow-400 mb-1">Prediction Unavailable</h3>
                 <p className="text-sm text-gray-300 mb-3">{mlError}</p>
-                <div className="bg-dark-900 rounded-lg p-3 font-mono text-xs text-gray-400">
-                  <div className="text-gray-500 mb-1"># Start the ML microservice:</div>
-                  <div className="text-green-400">cd ml</div>
-                  <div className="text-green-400">python app.py</div>
-                </div>
+                <button
+                  onClick={() => { setMlError(null); setRetryKey(k => k + 1); }}
+                  className="px-4 py-1.5 rounded-lg text-xs font-bold bg-yellow-500/20 text-yellow-300
+                             border border-yellow-500/30 hover:bg-yellow-500/30 transition"
+                >
+                  Try Again
+                </button>
               </div>
             </div>
           </motion.div>
@@ -630,11 +667,15 @@ const Predictions = () => {
             <div className="text-center">
               <div className="w-16 h-16 border-4 border-f1red border-t-transparent rounded-full animate-spin mx-auto mb-4" />
               <p className="text-gray-400">
-                {loadingSchedule ? 'Loading race schedule…' : 'Running ML model inference…'}
+                {loadingSchedule ? 'Loading race schedule…'
+                  : waking ? 'Waking up prediction service…'
+                  : 'Running ML model inference…'}
               </p>
               {loading && (
                 <p className="text-gray-600 text-xs mt-2">
-                  Fetching live F1 data + computing features + model inference
+                  {waking
+                    ? 'The service was sleeping — this takes up to 30 seconds on first load.'
+                    : 'Fetching live F1 data + computing features + model inference'}
                 </p>
               )}
             </div>
