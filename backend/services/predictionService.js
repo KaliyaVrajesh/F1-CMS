@@ -170,17 +170,18 @@ async function predict(circuitId, year, type = 'race') {
       testSamples:      479,
     },
 
-    // Factor weight metadata re-mapped to ML feature importances
+    // Factor weight metadata — research-backed weights
+    // ~88% constructor variance (Bayesian F1 study), qualifying = strongest single predictor
     factorWeights: {
-      gridPosition:    { weight: 18, label: 'Qualifying / Grid Position' },
-      recentForm:      { weight: 17, label: 'Recent Form (Last 10 races)' },
-      constructorForm: { weight: 14, label: 'Constructor Recent Form' },
-      championship:    { weight: 14, label: 'Championship Standing' },
-      recentFormL5:    { weight: 9,  label: 'Recent Form (Last 5 races)' },
-      constrPrevSeason:{ weight: 6,  label: 'Constructor Prev Season Pts' },
-      constrPrevPos:   { weight: 4,  label: 'Constructor Prev Season Pos' },
-      driverPrevSeason:{ weight: 4,  label: 'Driver Prev Season Pts' },
-      circuitHistory:  { weight: 3,  label: 'Circuit History' },
+      gridPosition:    { weight: 22, label: 'Qualifying / Grid Position' },
+      constructorForm: { weight: 20, label: 'Constructor Recent Form (Car)' },
+      constrPrevSeason:{ weight: 10, label: 'Constructor Prev Season (Car)' },
+      recentForm:      { weight:  9, label: 'Driver Recent Form (Last 10)' },
+      recentFormL5:    { weight:  6, label: 'Driver Recent Form (Last 5)' },
+      circuitHistory:  { weight:  5, label: 'Circuit History' },
+      championship:    { weight:  5, label: 'Championship Standing' },
+      dnfReliability:  { weight:  4, label: 'DNF / Reliability Rate' },
+      driverPrevSeason:{ weight:  3, label: 'Driver Prev Season Points' },
     },
 
     predictions,
