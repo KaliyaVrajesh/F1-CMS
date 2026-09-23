@@ -65,49 +65,109 @@ def safe_get(url: str, retries: int = 3) -> dict:
 
 def get_driver_standings(year: int) -> list[dict]:
     """
-    Fetch current season driver standings.
-    Used as a proxy for driver quality in-season.
+    Fetch driver standings.
+    For 'prev season' features the model was trained on, we use year-1 standings
+    so the model sees the same feature distribution it was trained on.
+    Current-year standings are only used as a fallback if prev-year is unavailable.
     """
-    data = safe_get(f"{BASE_URL}/{year}/driverStandings.json")
-    lst  = (data.get("MRData", {})
-                .get("StandingsTable", {})
-                .get("StandingsLists", [{}])[0]
-                .get("DriverStandings", []))
-    return [
-        {
-            "driver_id":              s["Driver"]["driverId"],
+    # Prefer previous season final standings (matches training feature semantics)
+    prev_data = safe_get(f"{BASE_URL}/{year - 1}/driverStandings.json")
+    prev_lst  = (prev_data.get("MRData", {})
+                          .get("StandingsTable", {})
+                          .get("StandingsLists", [{}])[0]
+                          .get("DriverStandings", []))
+
+    # Also fetch current season for the driver roster (new drivers may not be in prev year)
+    curr_data = safe_get(f"{BASE_URL}/{year}/driverStandings.json")
+    curr_lst  = (curr_data.get("MRData", {})
+                          .get("StandingsTable", {})
+                          .get("StandingsLists", [{}])[0]
+                          .get("DriverStandings", []))
+
+    if not curr_lst:
+        raise ValueError(f"No driver standings available for {year}.")
+
+    # Build prev-season lookup keyed by driver_id
+    prev_map = {}
+    for s in prev_lst:
+        if s.get("Driver") and s.get("Constructors"):
+            did = s["Driver"]["driverId"]
+            prev_map[did] = {
+                "driver_prev_season_pts":  float(s.get("points", 0)),
+                "driver_prev_season_pos":  int(s.get("position", 20)),
+                "driver_prev_season_wins": int(s.get("wins", 0)),
+            }
+
+    result = []
+    for s in curr_lst:
+        if not (s.get("Driver") and s.get("Constructors")):
+            continue
+        did = s["Driver"]["driverId"]
+        # Use prev-season stats if available, else fall back to current season
+        prev = prev_map.get(did, {
+            "driver_prev_season_pts":  float(s.get("points", 0)),
+            "driver_prev_season_pos":  int(s.get("position", 20)),
+            "driver_prev_season_wins": int(s.get("wins", 0)),
+        })
+        result.append({
+            "driver_id":              did,
             "driver_code":            s["Driver"].get("code", s["Driver"]["familyName"][:3].upper()),
             "first_name":             s["Driver"]["givenName"],
             "last_name":              s["Driver"]["familyName"],
             "nationality":            s["Driver"]["nationality"],
-            "constructor_id":         s["Constructors"][0]["constructorId"] if s.get("Constructors") else "",
-            "constructor":            s["Constructors"][0]["name"]          if s.get("Constructors") else "",
-            # Use current standings as "prev season" proxy for in-season predictions
-            "driver_prev_season_pts":  float(s.get("points", 0)),
-            "driver_prev_season_pos":  int(s.get("position", 20)),
-            "driver_prev_season_wins": int(s.get("wins", 0)),
-        }
-        for s in lst
-        if s.get("Driver") and s.get("Constructors")
-    ]
+            "constructor_id":         s["Constructors"][0]["constructorId"],
+            "constructor":            s["Constructors"][0]["name"],
+            "driver_prev_season_pts":  prev["driver_prev_season_pts"],
+            "driver_prev_season_pos":  prev["driver_prev_season_pos"],
+            "driver_prev_season_wins": prev["driver_prev_season_wins"],
+        })
+    return result
 
 
 def get_constructor_standings(year: int) -> list[dict]:
-    data = safe_get(f"{BASE_URL}/{year}/constructorStandings.json")
-    lst  = (data.get("MRData", {})
-                .get("StandingsTable", {})
-                .get("StandingsLists", [{}])[0]
-                .get("ConstructorStandings", []))
-    return [
-        {
-            "constructor_id":        s["Constructor"]["constructorId"],
+    """
+    Fetch constructor standings using previous season finals (matches training semantics).
+    Falls back to current season for constructors that didn't exist last year.
+    """
+    prev_data = safe_get(f"{BASE_URL}/{year - 1}/constructorStandings.json")
+    prev_lst  = (prev_data.get("MRData", {})
+                          .get("StandingsTable", {})
+                          .get("StandingsLists", [{}])[0]
+                          .get("ConstructorStandings", []))
+
+    curr_data = safe_get(f"{BASE_URL}/{year}/constructorStandings.json")
+    curr_lst  = (curr_data.get("MRData", {})
+                          .get("StandingsTable", {})
+                          .get("StandingsLists", [{}])[0]
+                          .get("ConstructorStandings", []))
+
+    prev_map = {}
+    for s in prev_lst:
+        if s.get("Constructor"):
+            cid = s["Constructor"]["constructorId"]
+            prev_map[cid] = {
+                "constr_prev_season_pts":  float(s.get("points", 0)),
+                "constr_prev_season_pos":  int(s.get("position", 10)),
+                "constr_prev_season_wins": int(s.get("wins", 0)),
+            }
+
+    result = []
+    for s in curr_lst:
+        if not s.get("Constructor"):
+            continue
+        cid  = s["Constructor"]["constructorId"]
+        prev = prev_map.get(cid, {
             "constr_prev_season_pts":  float(s.get("points", 0)),
             "constr_prev_season_pos":  int(s.get("position", 10)),
             "constr_prev_season_wins": int(s.get("wins", 0)),
-        }
-        for s in lst
-        if s.get("Constructor")
-    ]
+        })
+        result.append({
+            "constructor_id":        cid,
+            "constr_prev_season_pts":  prev["constr_prev_season_pts"],
+            "constr_prev_season_pos":  prev["constr_prev_season_pos"],
+            "constr_prev_season_wins": prev["constr_prev_season_wins"],
+        })
+    return result
 
 
 def get_recent_driver_results(driver_id: str, year: int, n: int = 10) -> list[dict]:
@@ -240,9 +300,12 @@ def assemble_features(
             grid_pos  = qualifying_grid[driver_id]
             quali_pos = qualifying_grid[driver_id]
         else:
-            # Estimate from championship position as fallback
-            grid_pos  = min(drv["driver_prev_season_pos"], 20)
-            quali_pos = min(drv["driver_prev_season_pos"], 20)
+            # No qualifying data yet — estimate from recent form (avg L5)
+            # We compute recent results first and use them as the grid estimate.
+            # This is filled in below after we have avg_l5; use prev season pos
+            # as a temporary placeholder — overwritten after form is computed.
+            grid_pos  = None  # resolved below
+            quali_pos = None
 
         # ── Constructor standings ──────────────────────────────────────────
         c = constr_map.get(constructor_id, {})
@@ -268,6 +331,13 @@ def assemble_features(
         avg_l5  = float(np.mean(positions_l5))  if positions_l5  else 11.0
         avg_l10 = float(np.mean(positions_l10)) if positions_l10 else 11.0
         dnf_l10 = float(sum(1 for s in statuses_l10 if is_dnf(s)) / max(len(statuses_l10), 1))
+
+        # Resolve grid estimate now that we have recent form
+        if grid_pos is None:
+            # Best estimate without qualifying: blend recent form and prev season pos
+            estimated = round((avg_l5 * 0.7 + drv["driver_prev_season_pos"] * 0.3))
+            grid_pos  = int(min(max(estimated, 1), 20))
+            quali_pos = grid_pos
 
         # ── Constructor form ───────────────────────────────────────────────
         constr_avg_l5 = get_constructor_recent_form(constructor_id, year, n=5)
