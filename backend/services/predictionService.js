@@ -78,6 +78,7 @@ async function predict(circuitId, year, type = 'race') {
       circuit_id: circuitId,
       year,
       round:      roundNum,
+      type,
     });
     mlResponse = data;
   } catch (err) {
@@ -95,9 +96,7 @@ async function predict(circuitId, year, type = 'race') {
   }
 
   // ── Normalise response to match the shape the frontend already uses ────────
-  // The frontend was built for the old statistical service; we map the ML
-  // output fields to the same keys so the existing UI works without changes,
-  // while also adding new ML-specific fields.
+  // Map ML output fields to the keys expected by frontend components
   const predictions = mlResponse.predictions.map((p, idx) => ({
     rank:               p.rank,
     driverId:           p.driver_id,
@@ -126,7 +125,6 @@ async function predict(circuitId, year, type = 'race') {
     constructorPoints:   p.constr_champ_pts,
 
     // Keep factorScores stub so old frontend radar chart doesn't crash
-    // (we'll update the frontend to use ML feature importances instead)
     factorScores: {
       gridPosition:    normalise(p.grid_position,       1, 20, true),
       recentForm:      normalise(p.recent_avg_l5,       1, 20, true),
@@ -140,7 +138,7 @@ async function predict(circuitId, year, type = 'race') {
     },
 
     // Plain-English reason built from actual ML feature values
-    reason: buildReason(p),
+    reason: buildReason(p, type),
 
     compositeScore: parseFloat((1 / Math.max(p.predicted_position, 1)).toFixed(4)),
   }));
@@ -151,7 +149,7 @@ async function predict(circuitId, year, type = 'race') {
     type,
     round:               roundNum,
     generatedAt:         mlResponse.generated_at,
-    modelName:           'Random Forest (scikit-learn)',
+    modelName:           mlResponse.model || 'Random Forest & HistGradientBoosting',
     modelType:           'supervised_ml',
     totalRacesAtCircuit: Math.max(...predictions.map(p => p.circuitAppearances), 0),
 
@@ -160,28 +158,28 @@ async function predict(circuitId, year, type = 'race') {
       algorithm:        'Random Forest Regressor + Calibrated Gradient Boosting Classifiers',
       trainSeasons:     '2010 – 2023',
       testSeason:       '2024',
-      testMAE:          3.104,
-      testR2:           0.523,
-      top3Accuracy:     0.556,
-      podiumAUC:        0.932,
-      winAUC:           0.937,
-      features:         17,
-      trainSamples:     5953,
+      testMAE:          3.018,
+      testR2:           0.542,
+      top3Accuracy:     0.694,
+      podiumAUC:        0.940,
+      winAUC:           0.938,
+      features:         20,
+      trainSamples:     5513,
       testSamples:      479,
     },
 
     // Factor weight metadata — research-backed weights
-    // ~88% constructor variance (Bayesian F1 study), qualifying = strongest single predictor
+    // Qualifying is by far the heaviest predictor of race results
     factorWeights: {
-      gridPosition:    { weight: 22, label: 'Qualifying / Grid Position' },
-      constructorForm: { weight: 20, label: 'Constructor Recent Form (Car)' },
-      constrPrevSeason:{ weight: 10, label: 'Constructor Prev Season (Car)' },
-      recentForm:      { weight:  9, label: 'Driver Recent Form (Last 10)' },
-      recentFormL5:    { weight:  6, label: 'Driver Recent Form (Last 5)' },
-      circuitHistory:  { weight:  5, label: 'Circuit History' },
-      championship:    { weight:  5, label: 'Championship Standing' },
-      dnfReliability:  { weight:  4, label: 'DNF / Reliability Rate' },
-      driverPrevSeason:{ weight:  3, label: 'Driver Prev Season Points' },
+      gridPosition:    { weight: 29, label: 'Qualifying / Grid Position' },
+      constructorForm: { weight: 20, label: 'Constructor Car Pace (Upgrades)' },
+      recentForm:      { weight: 15, label: 'Driver Recent Form (Last 10)' },
+      recentFormL5:    { weight: 10, label: 'Driver Momentum (Last 5)' },
+      championship:    { weight:  8, label: 'Current Championship Standing' },
+      circuitHistory:  { weight:  7, label: 'Circuit Track Record' },
+      dnfReliability:  { weight:  5, label: 'DNF / Mechanical Reliability' },
+      constrPrevSeason:{ weight:  4, label: 'Constructor Regulation History' },
+      driverPrevSeason:{ weight:  2, label: 'Driver Prior Points' },
     },
 
     predictions,
@@ -202,25 +200,37 @@ function normalise(val, min, max, invert = false) {
 }
 
 /** Build a plain-English reason from actual ML feature values. */
-function buildReason(p) {
+function buildReason(p, type = 'race') {
   const parts = [];
-  if (p.grid_position <= 3)
-    parts.push(`qualifies near the front (P${p.grid_position})`);
-  if (p.circuit_appearances >= 3 && p.circuit_avg_finish <= 5)
-    parts.push(`strong circuit history (avg P${p.circuit_avg_finish.toFixed(1)})`);
-  if (p.circuit_podium_rate >= 30)
-    parts.push(`${p.circuit_podium_rate.toFixed(0)}% podium rate here`);
-  if (p.recent_avg_l5 <= 4)
-    parts.push(`excellent recent form (avg P${p.recent_avg_l5.toFixed(1)} last 5 races)`);
-  if (p.championship_pos <= 3)
-    parts.push(`P${p.championship_pos} in championship`);
-  if (p.constr_champ_pos <= 2)
-    parts.push(`top-${p.constr_champ_pos} constructor`);
-  if (p.dnf_rate >= 20)
-    parts.push(`elevated DNF risk (${p.dnf_rate.toFixed(0)}%)`);
+  if (type === 'qualifying') {
+    if (p.rank <= 3)
+      parts.push(`front-row qualifying contender (P${p.rank})`);
+    if (p.recent_avg_l5 <= 4)
+      parts.push(`strong one-lap momentum (avg P${p.recent_avg_l5.toFixed(1)} last 5)`);
+    if (p.constr_champ_pos <= 2)
+      parts.push(`top-tier constructor package`);
+    if (p.circuit_podium_rate >= 30)
+      parts.push(`${p.circuit_podium_rate.toFixed(0)}% podium rate at this track`);
+  } else {
+    if (p.grid_position === 1)
+      parts.push(`starts from POLE position (P1)`);
+    else if (p.grid_position <= 3)
+      parts.push(`prime front-running grid slot (P${p.grid_position})`);
+    else if (p.grid_position <= 6)
+      parts.push(`starting in top 6 on grid (P${p.grid_position})`);
+    else if (p.grid_position >= 15 && p.constr_champ_pos <= 3)
+      parts.push(`starting out of position (P${p.grid_position}) with high recovery potential`);
+
+    if (p.circuit_appearances >= 3 && p.circuit_avg_finish <= 5)
+      parts.push(`strong track record (avg P${p.circuit_avg_finish.toFixed(1)})`);
+    if (p.recent_avg_l5 <= 4)
+      parts.push(`excellent recent form (avg P${p.recent_avg_l5.toFixed(1)} last 5)`);
+    if (p.dnf_rate >= 20)
+      parts.push(`elevated DNF risk (${p.dnf_rate.toFixed(0)}%)`);
+  }
   return parts.length > 0
     ? parts.join(' · ')
-    : 'Competitive based on historical and current season data';
+    : 'Competitive based on track performance and machine learning modeling';
 }
 
 /**

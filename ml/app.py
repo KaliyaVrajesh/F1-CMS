@@ -68,6 +68,8 @@ def predict():
     round_num   = body.get("round")          # may be None
     quali_grid  = body.get("qualifying", {}) # optional {driver_id: position}
 
+    pred_type   = body.get("type", "race")   # 'race' or 'qualifying'
+
     if not circuit_id:
         return jsonify({"error": "circuit_id is required"}), 400
 
@@ -80,6 +82,7 @@ def predict():
             year=year,
             round_num=round_num,
             qualifying_grid=quali_grid,
+            prediction_type=pred_type,
             verbose=False,
         )
         return jsonify(result)

@@ -1,20 +1,11 @@
 """
 predict.py
 ──────────
-Generates predictions for an upcoming race using the trained ML model.
+Generates race and qualifying predictions using the trained ML model bundle.
 
 Usage (standalone):
-    python predict.py --circuit monza --year 2026
-
-The prediction pipeline:
-  1. Fetch current driver/constructor standings from Jolpica API
-  2. Fetch circuit history for each driver
-  3. Compute driver rolling form from historical race results
-  4. Assemble feature vectors (one per driver)
-  5. Load trained model bundle
-  6. Predict finish_position for each driver
-  7. Compute win/podium probabilities from calibrated classifiers
-  8. Return ranked predictions with explanations
+    python predict.py --circuit baku --year 2026 --type race
+    python predict.py --circuit baku --year 2026 --type qualifying
 """
 
 import os
@@ -27,13 +18,14 @@ import pandas as pd
 import joblib
 import requests
 
-MODEL_DIR = os.path.join(os.path.dirname(__file__), "model")
-DATA_DIR  = os.path.join(os.path.dirname(__file__), "data")
-MODEL_PATH = f"{MODEL_DIR}/f1_prediction_model.pkl"
+MODEL_DIR  = os.path.join(os.path.dirname(__file__), "model")
+DATA_DIR   = os.path.join(os.path.dirname(__file__), "data")
+MODEL_PATH = os.path.join(MODEL_DIR, "f1_prediction_model.pkl")
 
 BASE_URL = "https://api.jolpi.ca/ergast/f1"
 
-_MODEL_BUNDLE = None  # module-level cache
+_MODEL_BUNDLE = None
+_CACHE = {}  # in-memory cache to prevent repeated API calls
 
 
 def load_model() -> dict:
@@ -49,15 +41,21 @@ def load_model() -> dict:
     return _MODEL_BUNDLE
 
 
-def safe_get(url: str, retries: int = 3) -> dict:
+def safe_get(url: str, retries: int = 3, timeout: int = 12) -> dict:
+    if url in _CACHE:
+        return _CACHE[url]
     for attempt in range(retries):
         try:
-            r = requests.get(url, timeout=15)
-            r.raise_for_status()
-            return r.json()
+            r = requests.get(url, timeout=timeout)
+            if r.status_code == 200:
+                data = r.json()
+                _CACHE[url] = data
+                return data
+            if r.status_code == 404:
+                return {}
         except Exception:
             if attempt < retries - 1:
-                time.sleep(1.0)
+                time.sleep(0.5)
     return {}
 
 
@@ -66,49 +64,58 @@ def safe_get(url: str, retries: int = 3) -> dict:
 def get_driver_standings(year: int) -> list[dict]:
     """
     Fetch driver standings.
-    For 'prev season' features the model was trained on, we use year-1 standings
-    so the model sees the same feature distribution it was trained on.
-    Current-year standings are only used as a fallback if prev-year is unavailable.
+    Prefers current season if data exists (>0 races); falls back to previous season.
+    This ensures regulation changes, team moves, and current upgrades are respected.
     """
-    # Prefer previous season final standings (matches training feature semantics)
-    prev_data = safe_get(f"{BASE_URL}/{year - 1}/driverStandings.json")
-    prev_lst  = (prev_data.get("MRData", {})
-                          .get("StandingsTable", {})
-                          .get("StandingsLists", [{}])[0]
-                          .get("DriverStandings", []))
-
-    # Also fetch current season for the driver roster (new drivers may not be in prev year)
     curr_data = safe_get(f"{BASE_URL}/{year}/driverStandings.json")
     curr_lst  = (curr_data.get("MRData", {})
                           .get("StandingsTable", {})
                           .get("StandingsLists", [{}])[0]
                           .get("DriverStandings", []))
 
-    if not curr_lst:
-        raise ValueError(f"No driver standings available for {year}.")
+    prev_data = safe_get(f"{BASE_URL}/{year - 1}/driverStandings.json")
+    prev_lst  = (prev_data.get("MRData", {})
+                          .get("StandingsTable", {})
+                          .get("StandingsLists", [{}])[0]
+                          .get("DriverStandings", []))
 
-    # Build prev-season lookup keyed by driver_id
     prev_map = {}
     for s in prev_lst:
-        if s.get("Driver") and s.get("Constructors"):
+        if s.get("Driver"):
             did = s["Driver"]["driverId"]
             prev_map[did] = {
-                "driver_prev_season_pts":  float(s.get("points", 0)),
-                "driver_prev_season_pos":  int(s.get("position", 20)),
-                "driver_prev_season_wins": int(s.get("wins", 0)),
+                "pts":  float(s.get("points", 0)),
+                "pos":  int(s.get("position", 20)),
+                "wins": int(s.get("wins", 0)),
             }
 
+    roster_list = curr_lst if curr_lst else prev_lst
+    if not roster_list:
+        raise ValueError(f"No driver standings available for {year}.")
+
     result = []
-    for s in curr_lst:
+    has_current_pts = any(float(s.get("points", 0)) > 0 for s in curr_lst)
+
+    for s in roster_list:
         if not (s.get("Driver") and s.get("Constructors")):
             continue
         did = s["Driver"]["driverId"]
-        # Use prev-season stats if available, else fall back to current season
-        prev = prev_map.get(did, {
-            "driver_prev_season_pts":  float(s.get("points", 0)),
-            "driver_prev_season_pos":  int(s.get("position", 20)),
-            "driver_prev_season_wins": int(s.get("wins", 0)),
-        })
+        prev = prev_map.get(did, {"pts": 0.0, "pos": 20, "wins": 0})
+        
+        curr_pts = float(s.get("points", 0))
+        curr_pos = int(s.get("position", 20))
+        curr_wins = int(s.get("wins", 0))
+
+        # If current season has active points, blend current standing with prev season
+        if has_current_pts:
+            pts_val = curr_pts
+            pos_val = curr_pos
+            wins_val = curr_wins
+        else:
+            pts_val = prev["pts"]
+            pos_val = prev["pos"]
+            wins_val = prev["wins"]
+
         result.append({
             "driver_id":              did,
             "driver_code":            s["Driver"].get("code", s["Driver"]["familyName"][:3].upper()),
@@ -117,146 +124,130 @@ def get_driver_standings(year: int) -> list[dict]:
             "nationality":            s["Driver"]["nationality"],
             "constructor_id":         s["Constructors"][0]["constructorId"],
             "constructor":            s["Constructors"][0]["name"],
-            "driver_prev_season_pts":  prev["driver_prev_season_pts"],
-            "driver_prev_season_pos":  prev["driver_prev_season_pos"],
-            "driver_prev_season_wins": prev["driver_prev_season_wins"],
+            "driver_prev_season_pts":  pts_val,
+            "driver_prev_season_pos":  pos_val,
+            "driver_prev_season_wins": wins_val,
         })
     return result
 
 
 def get_constructor_standings(year: int) -> list[dict]:
-    """
-    Fetch constructor standings using previous season finals (matches training semantics).
-    Falls back to current season for constructors that didn't exist last year.
-    """
-    prev_data = safe_get(f"{BASE_URL}/{year - 1}/constructorStandings.json")
-    prev_lst  = (prev_data.get("MRData", {})
-                          .get("StandingsTable", {})
-                          .get("StandingsLists", [{}])[0]
-                          .get("ConstructorStandings", []))
-
+    """Fetch constructor standings, preferring current season if active."""
     curr_data = safe_get(f"{BASE_URL}/{year}/constructorStandings.json")
     curr_lst  = (curr_data.get("MRData", {})
                           .get("StandingsTable", {})
                           .get("StandingsLists", [{}])[0]
                           .get("ConstructorStandings", []))
 
-    prev_map = {}
-    for s in prev_lst:
-        if s.get("Constructor"):
-            cid = s["Constructor"]["constructorId"]
-            prev_map[cid] = {
-                "constr_prev_season_pts":  float(s.get("points", 0)),
-                "constr_prev_season_pos":  int(s.get("position", 10)),
-                "constr_prev_season_wins": int(s.get("wins", 0)),
-            }
+    prev_data = safe_get(f"{BASE_URL}/{year - 1}/constructorStandings.json")
+    prev_lst  = (prev_data.get("MRData", {})
+                          .get("StandingsTable", {})
+                          .get("StandingsLists", [{}])[0]
+                          .get("ConstructorStandings", []))
+
+    has_current_pts = any(float(s.get("points", 0)) > 0 for s in curr_lst)
+    c_list = curr_lst if has_current_pts and curr_lst else (prev_lst if prev_lst else curr_lst)
 
     result = []
-    for s in curr_lst:
+    for s in c_list:
         if not s.get("Constructor"):
             continue
-        cid  = s["Constructor"]["constructorId"]
-        prev = prev_map.get(cid, {
+        cid = s["Constructor"]["constructorId"]
+        result.append({
+            "constructor_id":         cid,
             "constr_prev_season_pts":  float(s.get("points", 0)),
             "constr_prev_season_pos":  int(s.get("position", 10)),
             "constr_prev_season_wins": int(s.get("wins", 0)),
         })
-        result.append({
-            "constructor_id":        cid,
-            "constr_prev_season_pts":  prev["constr_prev_season_pts"],
-            "constr_prev_season_pos":  prev["constr_prev_season_pos"],
-            "constr_prev_season_wins": prev["constr_prev_season_wins"],
-        })
     return result
 
 
-def get_recent_driver_results(driver_id: str, year: int, n: int = 10) -> list[dict]:
+def get_season_results_summary(year: int) -> tuple[dict, dict, dict]:
     """
-    Fetch the last `n` completed race results for a driver in a given season.
-    Returns list of finish_positions.
+    Fetch all completed races for the season in ONE call and compute rolling form.
+    Returns: (driver_l5_map, driver_l10_map, constr_l5_map).
     """
-    data  = safe_get(f"{BASE_URL}/{year}/drivers/{driver_id}/results.json?limit=50")
-    races = (data.get("MRData", {})
-                 .get("RaceTable", {})
-                 .get("Races", []))
-    positions = []
-    statuses  = []
+    data = safe_get(f"{BASE_URL}/{year}/results.json?limit=500")
+    races = data.get("MRData", {}).get("RaceTable", {}).get("Races", [])
+
+    # If few or no races in current year, supplement with previous year
+    if len(races) < 5:
+        prev_data = safe_get(f"{BASE_URL}/{year - 1}/results.json?limit=500")
+        prev_races = prev_data.get("MRData", {}).get("RaceTable", {}).get("Races", [])
+        races = prev_races + races
+
+    driver_history = {}
+    constr_history = {}
+
     for race in races:
         for r in race.get("Results", []):
+            did = r["Driver"]["driverId"]
+            cid = r["Constructor"]["constructorId"]
             try:
-                positions.append(int(r["position"]))
+                pos = int(r["position"])
             except (ValueError, KeyError):
-                positions.append(20)  # treat as DNF-equivalent
-            statuses.append(r.get("status", "Finished"))
-    # Return last n
-    return list(zip(positions[-n:], statuses[-n:]))
+                pos = 20
+            status = r.get("status", "Finished")
+            is_dnf = not (status == "Finished" or ("+" in status and "Lap" in status))
+
+            if did not in driver_history:
+                driver_history[did] = []
+            driver_history[did].append((pos, is_dnf))
+
+            if cid not in constr_history:
+                constr_history[cid] = []
+            constr_history[cid].append(pos)
+
+    driver_l5 = {}
+    driver_l10 = {}
+    driver_dnf = {}
+    for did, hist in driver_history.items():
+        positions = [p for p, _ in hist]
+        dnfs = [d for _, d in hist]
+        l5 = positions[-5:]
+        l10 = positions[-10:]
+        driver_l5[did] = float(np.mean(l5)) if l5 else 10.0
+        driver_l10[did] = float(np.mean(l10)) if l10 else 10.0
+        driver_dnf[did] = float(sum(dnfs[-10:]) / max(len(dnfs[-10:]), 1))
+
+    constr_l5 = {}
+    for cid, hist in constr_history.items():
+        l5 = hist[-10:]  # 2 cars per race -> 10 results = 5 races
+        constr_l5[cid] = float(np.mean(l5)) if l5 else 8.0
+
+    return driver_l5, driver_l10, driver_dnf, constr_l5
 
 
-def get_circuit_history_for_driver(driver_id: str, circuit_id: str, current_year: int) -> dict:
-    """
-    Historical results for a driver at a specific circuit
-    (only previous seasons, no current-year leakage).
-    """
-    data  = safe_get(f"{BASE_URL}/drivers/{driver_id}/circuits/{circuit_id}/results.json?limit=100")
-    races = (data.get("MRData", {})
-                 .get("RaceTable", {})
-                 .get("Races", []))
-
-    positions = []
-    for race in races:
-        if int(race.get("season", 0)) >= current_year:
-            continue  # exclude current season
-        for r in race.get("Results", []):
-            try:
-                positions.append(int(r["position"]))
-            except (ValueError, KeyError):
-                positions.append(20)
-
-    if not positions:
-        return {
-            "circuit_avg_finish":  11.0,
-            "circuit_appearances": 0,
-            "circuit_podium_rate": 0.0,
-        }
-    return {
-        "circuit_avg_finish":  float(np.mean(positions)),
-        "circuit_appearances": len(positions),
-        "circuit_podium_rate": float(sum(1 for p in positions if p <= 3) / len(positions)),
-    }
-
-
-def get_constructor_recent_form(constructor_id: str, year: int, n: int = 5) -> float:
-    """Average best finish for constructor in last n races."""
-    data  = safe_get(f"{BASE_URL}/{year}/constructors/{constructor_id}/results.json?limit=50")
-    races = (data.get("MRData", {})
-                 .get("RaceTable", {})
-                 .get("Races", []))
-
-    best_per_race = []
-    for race in races:
-        positions = []
-        for r in race.get("Results", []):
-            try:
-                positions.append(int(r["position"]))
-            except (ValueError, KeyError):
-                pass
-        if positions:
-            best_per_race.append(min(positions))
-
-    if not best_per_race:
-        return 6.0
-    return float(np.mean(best_per_race[-n:]))
+def get_circuit_history(circuit_id: str) -> dict:
+    """Read circuit history from local database (0 ms)."""
+    raw_path = os.path.join(DATA_DIR, "raw_results.csv")
+    if not os.path.exists(raw_path):
+        return {}
+    try:
+        df = pd.read_csv(raw_path)
+        sub = df[df["circuit_id"] == circuit_id]
+        if sub.empty:
+            return {}
+        res = {}
+        for did, grp in sub.groupby("driver_id"):
+            res[did] = {
+                "avg_finish": float(grp["finish_position"].mean()),
+                "appearances": len(grp),
+                "podium_rate": float((grp["finish_position"] <= 3).mean()),
+            }
+        return res
+    except Exception:
+        return {}
 
 
 def get_qualifying_order(circuit_id: str, year: int, round_num: int | None = None) -> dict[str, int]:
     """
-    Get qualifying results for a specific round.
-    Returns {driver_id: quali_position}.
-    If not yet available, returns empty dict (will fall back to estimated grid).
+    Get official qualifying results for a round from Jolpica.
+    Returns {driver_id: qualifying_position}.
     """
     if round_num is None:
         return {}
-    data  = safe_get(f"{BASE_URL}/{year}/{round_num}/qualifying.json")
+    data = safe_get(f"{BASE_URL}/{year}/{round_num}/qualifying.json")
     races = data.get("MRData", {}).get("RaceTable", {}).get("Races", [])
     if not races:
         return {}
@@ -268,144 +259,76 @@ def get_qualifying_order(circuit_id: str, year: int, round_num: int | None = Non
 
 # ── Feature assembly ──────────────────────────────────────────────────────────
 
-def assemble_features(
-    circuit_id: str,
-    year: int,
-    round_num: int | None,
-    qualifying_grid: dict[str, int],
-    verbose: bool = False,
-) -> pd.DataFrame:
-    """
-    Build one feature row per driver for an upcoming race.
-    Fetches all necessary data from the Jolpica API.
-    """
-    if verbose:
-        print(f"Fetching driver standings for {year}…")
-    drivers      = get_driver_standings(year)
-    if not drivers:
-        raise ValueError(f"No driver standings available for {year}.")
-
-    if verbose:
-        print(f"Fetching constructor standings…")
+def assemble_base_features(circuit_id: str, year: int, round_num: int | None = None) -> pd.DataFrame:
+    """Build pre-race base feature dataframe for all drivers."""
+    drivers = get_driver_standings(year)
     constructors = get_constructor_standings(year)
-    constr_map   = {c["constructor_id"]: c for c in constructors}
+    constr_map = {c["constructor_id"]: c for c in constructors}
+
+    driver_l5, driver_l10, driver_dnf, constr_l5 = get_season_results_summary(year)
+    circuit_hist_map = get_circuit_history(circuit_id)
+
+    NEW_REG_YEARS = {2014, 2022, 2026}
+    is_new_reg = 1 if year in NEW_REG_YEARS else 0
+    rnd = round_num or 1
+    round_weight = np.exp(-rnd / 10.0)
+    reg_factor = 0.5 if is_new_reg else 1.0
 
     rows = []
     for drv in drivers:
-        driver_id      = drv["driver_id"]
-        constructor_id = drv["constructor_id"]
+        did = drv["driver_id"]
+        cid = drv["constructor_id"]
+        c = constr_map.get(cid, {})
 
-        # ── Grid / qualifying position ─────────────────────────────────────
-        if qualifying_grid and driver_id in qualifying_grid:
-            grid_pos  = qualifying_grid[driver_id]
-            quali_pos = qualifying_grid[driver_id]
+        c_prev_pts = c.get("constr_prev_season_pts", 0.0)
+        c_prev_pos = c.get("constr_prev_season_pos", 10)
+        c_avg_l5   = constr_l5.get(cid, max(c_prev_pos * 1.5, 3.0))
+
+        # Driver rolling form — for rookies, baseline by their constructor's pace
+        if did in driver_l5:
+            d_avg_l5  = driver_l5[did]
+            d_avg_l10 = driver_l10[did]
+            d_dnf     = driver_dnf.get(did, 0.1)
         else:
-            # No qualifying data yet — estimate from recent form (avg L5)
-            # We compute recent results first and use them as the grid estimate.
-            # This is filled in below after we have avg_l5; use prev season pos
-            # as a temporary placeholder — overwritten after form is computed.
-            grid_pos  = None  # resolved below
-            quali_pos = None
+            # Rookie in a top car (e.g. Antonelli in Mercedes) inherits car capability
+            d_avg_l5  = c_avg_l5 + 1.0
+            d_avg_l10 = c_avg_l5 + 1.5
+            d_dnf     = 0.1
 
-        # ── Constructor standings ──────────────────────────────────────────
-        c = constr_map.get(constructor_id, {})
-        constr_prev_pts   = c.get("constr_prev_season_pts",  0.0)
-        constr_prev_pos   = c.get("constr_prev_season_pos",  10)
-        constr_prev_wins  = c.get("constr_prev_season_wins", 0)
+        chist = circuit_hist_map.get(did, {"avg_finish": 11.0, "appearances": 0, "podium_rate": 0.0})
 
-        # ── Driver rolling form ────────────────────────────────────────────
-        if verbose:
-            print(f"  Fetching form for {driver_id}…")
-        recent = get_recent_driver_results(driver_id, year, n=10)
-        positions_l10 = [p for p, _ in recent]
-        statuses_l10  = [s for _, s in recent]
-        positions_l5  = positions_l10[-5:]
-
-        def is_dnf(s):
-            if not s or s == "Finished":
-                return False
-            if s.startswith("+") and "Lap" in s:
-                return False
-            return True
-
-        avg_l5  = float(np.mean(positions_l5))  if positions_l5  else 11.0
-        avg_l10 = float(np.mean(positions_l10)) if positions_l10 else 11.0
-        dnf_l10 = float(sum(1 for s in statuses_l10 if is_dnf(s)) / max(len(statuses_l10), 1))
-
-        # Resolve grid estimate now that we have recent form
-        if grid_pos is None:
-            # Best estimate without qualifying: blend recent form and prev season pos
-            estimated = round((avg_l5 * 0.7 + drv["driver_prev_season_pos"] * 0.3))
-            grid_pos  = int(min(max(estimated, 1), 20))
-            quali_pos = grid_pos
-
-        # ── Constructor form ───────────────────────────────────────────────
-        constr_avg_l5 = get_constructor_recent_form(constructor_id, year, n=5)
-
-        # ── Circuit history ────────────────────────────────────────────────
-        if verbose:
-            print(f"  Fetching circuit history for {driver_id} @ {circuit_id}…")
-        circuit_hist = get_circuit_history_for_driver(driver_id, circuit_id, year)
+        c_decayed = c_prev_pts * round_weight * reg_factor
+        d_decayed = drv["driver_prev_season_pts"] * round_weight * reg_factor
 
         rows.append({
-            # Identifiers (not fed to model)
-            "driver_id":         driver_id,
-            "driver_code":       drv["driver_code"],
-            "first_name":        drv["first_name"],
-            "last_name":         drv["last_name"],
-            "nationality":       drv["nationality"],
-            "constructor_id":    constructor_id,
-            "constructor":       drv["constructor"],
-            # Features
-            "grid_position":            grid_pos,
-            "quali_position":           quali_pos,
+            "driver_id":                did,
+            "driver_code":              drv["driver_code"],
+            "first_name":               drv["first_name"],
+            "last_name":                drv["last_name"],
+            "nationality":              drv["nationality"],
+            "constructor_id":           cid,
+            "constructor":              drv["constructor"],
             "driver_prev_season_pts":   drv["driver_prev_season_pts"],
             "driver_prev_season_pos":   drv["driver_prev_season_pos"],
             "driver_prev_season_wins":  drv["driver_prev_season_wins"],
-            "constr_prev_season_pts":   constr_prev_pts,
-            "constr_prev_season_pos":   constr_prev_pos,
-            "constr_prev_season_wins":  constr_prev_wins,
-            "driver_avg_finish_l5":     avg_l5,
-            "driver_avg_finish_l10":    avg_l10,
-            "driver_dnf_rate_l10":      dnf_l10,
-            "constr_avg_finish_l5":     constr_avg_l5,
-            "circuit_avg_finish":       circuit_hist["circuit_avg_finish"],
-            "circuit_appearances":      circuit_hist["circuit_appearances"],
-            "circuit_podium_rate":      circuit_hist["circuit_podium_rate"],
-            "season_round":             round_num or 1,
-            "season_year":              year,
+            "constr_prev_season_pts":   c_prev_pts,
+            "constr_prev_season_pos":   c_prev_pos,
+            "constr_prev_season_wins":  c.get("constr_prev_season_wins", 0),
+            "driver_avg_finish_l5":     d_avg_l5,
+            "driver_avg_finish_l10":    d_avg_l10,
+            "form_trend":               d_avg_l5 - d_avg_l10,
+            "driver_dnf_rate_l10":      d_dnf,
+            "constr_avg_finish_l5":     c_avg_l5,
+            "circuit_avg_finish":       chist["avg_finish"],
+            "circuit_appearances":      chist["appearances"],
+            "circuit_podium_rate":      chist["podium_rate"],
+            "constr_prev_pts_decayed":  c_decayed,
+            "driver_prev_pts_decayed":  d_decayed,
+            "season_round":             rnd,
+            "is_new_reg_era":           is_new_reg,
         })
-        time.sleep(0.25)  # polite rate limiting
 
     return pd.DataFrame(rows)
-
-
-# ── Probability computation ───────────────────────────────────────────────────
-
-def compute_probabilities(
-    raw_pred_positions: np.ndarray,
-    win_probs_raw: np.ndarray,
-    podium_probs_raw: np.ndarray,
-) -> tuple[np.ndarray, np.ndarray]:
-    """
-    Post-process classifier probabilities:
-    - Win probabilities: normalise so they sum to 100%, cap at 60%
-    - Podium probabilities: cap at 75%, normalise top-3 ≤ 100%
-    """
-    # Win probs
-    win_sum = win_probs_raw.sum()
-    win_probs = (win_probs_raw / win_sum * 100) if win_sum > 0 else win_probs_raw * 100
-    win_probs = np.clip(win_probs, 0.2, 60.0)
-    win_probs = win_probs / win_probs.sum() * 100  # re-normalise
-
-    # Round to 1 decimal
-    win_probs = np.round(win_probs, 1)
-
-    # Podium probs (just clip, no forced normalisation — each driver independent)
-    pod_probs = np.clip(podium_probs_raw * 100, 0.2, 75.0)
-    pod_probs = np.round(pod_probs, 1)
-
-    return win_probs, pod_probs
 
 
 # ── Public API ────────────────────────────────────────────────────────────────
@@ -415,61 +338,168 @@ def predict_race(
     year: int,
     round_num: int | None = None,
     qualifying_grid: dict[str, int] | None = None,
+    prediction_type: str = "race",
     verbose: bool = False,
 ) -> dict:
     """
-    Main prediction function.
+    Main prediction endpoint for both Race and Qualifying.
     
-    Args:
-        circuit_id:      Ergast circuit ID (e.g. 'monza', 'monaco')
-        year:            Season year
-        round_num:       Race round number (used for qualifying lookup)
-        qualifying_grid: Optional pre-supplied {driver_id: grid_pos} dict
-        verbose:         Print progress
-
-    Returns:
-        Dict with predictions and metadata
+    If prediction_type == 'qualifying':
+      Uses pre-qualifying car pace & driver form to predict the qualifying classification
+      and pole position probabilities.
+      
+    If prediction_type == 'race':
+      Uses starting grid / qualifying as the HEAVIEST predictor.
+      Automatically retrieves real qualifying if available on Jolpica.
+      If not yet available, runs the qualifying model to generate the expected grid.
     """
     bundle = load_model()
-    regressor    = bundle["regressor"]
-    podium_clf   = bundle["podium_clf"]
-    win_clf      = bundle["win_clf"]
-    clf_imputer  = bundle["clf_imputer"]
-    features     = bundle["features"]
-
-    if qualifying_grid is None:
-        qualifying_grid = {}
-
-    # ── Assemble features ──────────────────────────────────────────────────────
-    df = assemble_features(
-        circuit_id=circuit_id,
-        year=year,
-        round_num=round_num,
-        qualifying_grid=qualifying_grid,
-        verbose=verbose,
-    )
-
+    df = assemble_base_features(circuit_id=circuit_id, year=year, round_num=round_num)
     if df.empty:
         raise ValueError("Could not assemble features — no driver data available.")
 
-    X = df[features]
+    # =========================================================================
+    # QUALIFYING PREDICTION MODE
+    # =========================================================================
+    if prediction_type == "qualifying":
+        q_features = bundle.get("quali_features", [
+            "constr_avg_finish_l5", "driver_avg_finish_l5", "driver_avg_finish_l10",
+            "form_trend", "circuit_avg_finish", "circuit_appearances", "circuit_podium_rate",
+            "constr_prev_pts_decayed", "driver_prev_pts_decayed", "is_new_reg_era", "season_round",
+        ])
+        X_q = df[q_features].fillna(10)
 
-    # ── Regression: predicted finishing position ───────────────────────────────
-    pred_positions = regressor.predict(X)
-    # Clip to realistic range
+        q_reg = bundle["quali_regressor"]
+        q_pole_clf = bundle["quali_pole_clf"]
+        q_top3_clf = bundle["quali_top3_clf"]
+
+        pred_quali = q_reg.predict(X_q)
+        pred_quali = np.clip(pred_quali, 1.0, 20.0)
+
+        raw_pole = q_pole_clf.predict_proba(X_q)[:, 1]
+        raw_top3 = q_top3_clf.predict_proba(X_q)[:, 1]
+
+        pole_sum = raw_pole.sum()
+        pole_probs = (raw_pole / pole_sum * 100) if pole_sum > 0 else raw_pole * 100
+        pole_probs = np.round(np.clip(pole_probs, 0.1, 60.0), 1)
+        pole_probs = np.round((pole_probs / pole_probs.sum()) * 100, 1)
+
+        top3_probs = np.round(np.clip(raw_top3 * 100, 0.5, 95.0), 1)
+
+        order = np.argsort(pred_quali)
+        df_sorted = df.iloc[order].reset_index(drop=True)
+
+        predictions = []
+        for rank, idx in enumerate(order, start=1):
+            row = df.iloc[idx]
+            predictions.append({
+                "rank":                rank,
+                "driver_id":           row["driver_id"],
+                "driver_code":         row["driver_code"],
+                "name":                f"{row['first_name']} {row['last_name']}",
+                "constructor":         row["constructor"],
+                "constructor_id":      row["constructor_id"],
+                "nationality":         row["nationality"],
+                "predicted_position":  round(float(pred_quali[idx]), 2),
+                "win_probability":     float(pole_probs[idx]),
+                "podium_probability":  float(top3_probs[idx]),
+                "grid_position":       rank,
+                "championship_pos":    int(row["driver_prev_season_pos"]),
+                "championship_pts":    float(row["driver_prev_season_pts"]),
+                "season_wins":         int(row["driver_prev_season_wins"]),
+                "circuit_appearances": int(row["circuit_appearances"]),
+                "circuit_avg_finish":  round(float(row["circuit_avg_finish"]), 2),
+                "circuit_podium_rate": round(float(row["circuit_podium_rate"]) * 100, 1),
+                "recent_avg_l5":       round(float(row["driver_avg_finish_l5"]), 2),
+                "dnf_rate":            round(float(row["driver_dnf_rate_l10"]) * 100, 1),
+                "constr_champ_pos":    int(row["constr_prev_season_pos"]),
+                "constr_champ_pts":    float(row["constr_prev_season_pts"]),
+            })
+
+        return {
+            "circuit_id":   circuit_id,
+            "year":         year,
+            "round":        round_num,
+            "type":         "qualifying",
+            "model":        "HistGradientBoosting Regressor + Calibrated Pole Classifier",
+            "generated_at": pd.Timestamp.utcnow().isoformat() + "Z",
+            "predictions":  predictions,
+        }
+
+    # =========================================================================
+    # RACE PREDICTION MODE (QUALIFYING AS HEAVIEST ANCHOR)
+    # =========================================================================
+    # 1. Determine Starting Grid:
+    # Priority A: explicitly supplied grid
+    # Priority B: official qualifying from Jolpica
+    # Priority C: run the Qualifying Model to predict starting positions
+    grid_source = "provided"
+    final_grid = {}
+    if qualifying_grid:
+        final_grid = qualifying_grid
+    elif round_num:
+        official_q = get_qualifying_order(circuit_id, year, round_num)
+        if official_q:
+            final_grid = official_q
+            grid_source = "official_qualifying"
+
+    if not final_grid:
+        # Run pre-qualifying model to get estimated starting positions
+        grid_source = "predicted_qualifying"
+        q_features = bundle.get("quali_features")
+        X_q = df[q_features].fillna(10)
+        pred_q_positions = bundle["quali_regressor"].predict(X_q)
+        q_order = np.argsort(pred_q_positions)
+        for g_rank, idx in enumerate(q_order, start=1):
+            final_grid[df.iloc[idx]["driver_id"]] = g_rank
+
+    # Assign grid positions to dataframe
+    grid_positions = []
+    for _, row in df.iterrows():
+        did = row["driver_id"]
+        grid_positions.append(final_grid.get(did, 20))
+    df["grid_position"] = grid_positions
+
+    # 2. Compute Car & Teammate Benchmarks
+    team_best = (
+        df.groupby("constructor_id")["grid_position"]
+          .min().to_dict()
+    )
+    df["team_best_grid"] = df["constructor_id"].map(team_best)
+    df["grid_vs_team_best"] = df["grid_position"] - df["team_best_grid"]
+
+    # 3. Grid Advantage Indicators
+    df["is_pole"]      = (df["grid_position"] == 1).astype(int)
+    df["is_front_row"] = (df["grid_position"] <= 2).astype(int)
+    df["is_top3_grid"] = (df["grid_position"] <= 3).astype(int)
+    df["is_top6_grid"] = (df["grid_position"] <= 6).astype(int)
+    df["grid_inv"]     = 1.0 / np.maximum(df["grid_position"], 1)
+
+    race_features = bundle.get("race_features", bundle.get("features"))
+    X_r = df[race_features].fillna(10)
+
+    # 4. Predict finishing positions
+    regressor = bundle["regressor"]
+    pred_positions = regressor.predict(X_r)
     pred_positions = np.clip(pred_positions, 1.0, 20.0)
 
-    # ── Classification: win and podium probabilities ───────────────────────────
-    X_imp = clf_imputer.transform(X)
-    win_raw    = win_clf.predict_proba(X_imp)[:, 1]
-    podium_raw = podium_clf.predict_proba(X_imp)[:, 1]
+    # 5. Predict Win and Podium probabilities
+    win_clf    = bundle["win_clf"]
+    podium_clf = bundle["podium_clf"]
 
-    win_probs, pod_probs = compute_probabilities(pred_positions, win_raw, podium_raw)
+    raw_win = win_clf.predict_proba(X_r)[:, 1]
+    raw_pod = podium_clf.predict_proba(X_r)[:, 1]
 
-    # ── Rank drivers by predicted position (ascending) ─────────────────────────
+    # Normalize win probabilities: sum to 100%
+    win_sum = raw_win.sum()
+    win_probs = (raw_win / win_sum * 100) if win_sum > 0 else raw_win * 100
+    win_probs = np.clip(win_probs, 0.1, 65.0)
+    win_probs = np.round((win_probs / win_probs.sum()) * 100, 1)
+
+    pod_probs = np.round(np.clip(raw_pod * 100, 0.5, 95.0), 1)
+
+    # Sort drivers by predicted finish position
     order = np.argsort(pred_positions)
-    df = df.reset_index(drop=True)
-
     predictions = []
     for rank, idx in enumerate(order, start=1):
         row = df.iloc[idx]
@@ -484,11 +514,11 @@ def predict_race(
             "predicted_position":  round(float(pred_positions[idx]), 2),
             "win_probability":     float(win_probs[idx]),
             "podium_probability":  float(pod_probs[idx]),
-            # Key features for display
+            "grid_position":       int(row["grid_position"]),
+            "grid_source":         grid_source,
             "championship_pos":    int(row["driver_prev_season_pos"]),
             "championship_pts":    float(row["driver_prev_season_pts"]),
             "season_wins":         int(row["driver_prev_season_wins"]),
-            "grid_position":       int(row["grid_position"]),
             "circuit_appearances": int(row["circuit_appearances"]),
             "circuit_avg_finish":  round(float(row["circuit_avg_finish"]), 2),
             "circuit_podium_rate": round(float(row["circuit_podium_rate"]) * 100, 1),
@@ -502,7 +532,9 @@ def predict_race(
         "circuit_id":   circuit_id,
         "year":         year,
         "round":        round_num,
-        "model":        "ML — Gradient Boosting / Random Forest",
+        "type":         "race",
+        "grid_source":  grid_source,
+        "model":        "Ensemble Regressor + Calibrated Gradient Boosting Classifiers",
         "generated_at": pd.Timestamp.utcnow().isoformat() + "Z",
         "predictions":  predictions,
     }
@@ -510,9 +542,10 @@ def predict_race(
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="F1 ML Prediction")
-    parser.add_argument("--circuit", required=True, help="Circuit ID (e.g. monza)")
+    parser.add_argument("--circuit", required=True, help="Circuit ID (e.g. baku)")
     parser.add_argument("--year",    type=int, default=2026, help="Season year")
     parser.add_argument("--round",   type=int, default=None, help="Round number")
+    parser.add_argument("--type",    type=str, default="race", choices=["race", "qualifying"])
     parser.add_argument("--verbose", action="store_true")
     args = parser.parse_args()
 
@@ -520,13 +553,16 @@ if __name__ == "__main__":
         circuit_id=args.circuit,
         year=args.year,
         round_num=args.round,
+        prediction_type=args.type,
         verbose=args.verbose,
     )
 
+    print(f"\n{args.type.upper()} PREDICTIONS for {args.circuit.upper()} {args.year} (Round {args.round}):")
+    print(f"{'Rank':4s} {'Driver':6s} {'Team':12s} {'Grid':6s} {'PredPos':8s} {'Win/Pole%':10s} {'Podium/Top3%':12s}")
+    print("-" * 65)
     for p in result["predictions"][:10]:
         print(
-            f"P{p['rank']:2d}  {p['name']:<25s}  "
-            f"Win: {p['win_probability']:5.1f}%  "
-            f"Podium: {p['podium_probability']:5.1f}%  "
-            f"Pred pos: {p['predicted_position']:.1f}"
+            f"P{p['rank']:2d}  {p['driver_code']:6s} {p['constructor']:<12s} "
+            f"P{p['grid_position']:<5d} P{p['predicted_position']:<6.1f} "
+            f"{p['win_probability']:6.1f}%     {p['podium_probability']:6.1f}%"
         )

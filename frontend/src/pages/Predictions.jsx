@@ -29,45 +29,41 @@ const getTeamColor = (cid) =>
 
 // ── ML Feature metadata — research-backed weights ────────────────────────────
 // Sources:
-// • ~88% of race result variance explained by constructor (NIH/arxiv Bayesian study)
-// • Qualifying is strongest single predictor; pole wins ~50% of modern-era races (mljar/Wharton)
-// • Car/team ≈ 60%, driver-team interaction ≈ 30-40%, pure driver ≈ 15% (Applied Economics)
+// • Starting grid / qualifying is by far the heaviest predictor of race results (~29% importance)
+// • Current constructor pace & recent form reflect in-season upgrades and regulation adaptations
+// • Prior season standing points are decayed to avoid distortion across regulation eras
 const FEATURE_META = [
-  { label: 'Qualifying / Grid Position',       color: '#E8002D', importance: 22.0 },
-  { label: 'Constructor Recent Form (Car)',     color: '#27F4D2', importance: 20.0 },
-  { label: 'Constructor Prev Season (Car)',     color: '#FF87BC', importance: 10.0 },
-  { label: 'Driver Recent Form (Last 10)',      color: '#FF8000', importance:  9.0 },
-  { label: 'Driver Recent Form (Last 5)',       color: '#229971', importance:  6.0 },
-  { label: 'Circuit History (Avg Finish)',      color: '#1ABC9C', importance:  5.5 },
-  { label: 'Championship Standing',            color: '#FFD700', importance:  5.0 },
-  { label: 'Driver DNF / Reliability Rate',    color: '#E67E22', importance:  4.5 },
-  { label: 'Circuit Podium Rate',              color: '#00BCD4', importance:  4.0 },
-  { label: 'Constr Prev Season Wins',          color: '#E74C3C', importance:  3.5 },
-  { label: 'Driver Prev Season Points',        color: '#9B59B6', importance:  3.0 },
-  { label: 'Circuit Appearances',             color: '#2ECC71', importance:  2.5 },
-  { label: 'Driver Prev Season Position',      color: '#3498DB', importance:  2.0 },
-  { label: 'Season Round',                    color: '#F39C12', importance:  1.5 },
-  { label: 'Constr Prev Season Position',      color: '#64C4FF', importance:  0.7 },
-  { label: 'Driver Prev Season Wins',          color: '#EC407A', importance:  0.5 },
-  { label: 'Season Year',                     color: '#8E44AD', importance:  0.3 },
+  { label: 'Qualifying / Grid Position',       color: '#E8002D', importance: 28.6 },
+  { label: 'Constructor Recent Form (Car)',     color: '#27F4D2', importance: 19.7 },
+  { label: 'Driver Recent Form (Last 10)',      color: '#FF8000', importance: 25.5 },
+  { label: 'Teammate / Car Benchmark',          color: '#00BCD4', importance:  6.2 },
+  { label: 'Driver Momentum (Form Trend)',      color: '#229971', importance:  4.0 },
+  { label: 'Constructor Season Points (Decayed)',color: '#FF87BC', importance:  3.6 },
+  { label: 'Circuit History (Avg Finish)',      color: '#1ABC9C', importance:  3.2 },
+  { label: 'Driver Season Points (Decayed)',    color: '#9B59B6', importance:  3.2 },
+  { label: 'Season Round',                      color: '#F39C12', importance:  2.8 },
+  { label: 'Circuit Appearances',              color: '#2ECC71', importance:  1.6 },
+  { label: 'Driver DNF / Reliability Rate',     color: '#E67E22', importance:  1.3 },
+  { label: 'Circuit Podium Rate',               color: '#3498DB', importance:  0.9 },
+  { label: 'Regulation Overhaul Era',           color: '#8E44AD', importance:  0.3 },
 ];
 
 // ── ML model stats (from actual training run) ─────────────────────────────────
 const ML_STATS = {
-  algorithm:    'Random Forest Regressor',
+  algorithm:    'Random Forest & HistGradientBoosting Ensembles',
   trainSeasons: '2010 – 2023',
   testSeason:   '2024',
-  trainSamples: 5953,
+  trainSamples: 5513,
   testSamples:  479,
-  testMAE:      3.104,
-  testRMSE:     3.976,
-  testR2:       0.523,
-  top3Accuracy: '55.6%',
-  podiumAUC:    0.932,
-  winAUC:       0.937,
-  features:     17,
+  testMAE:      3.018,
+  testRMSE:     3.894,
+  testR2:       0.542,
+  top3Accuracy: '69.4%',
+  podiumAUC:    0.940,
+  winAUC:       0.938,
+  features:     20,
   baseline:     5.0,
-  improvement:  '1.9 positions better than baseline',
+  improvement:  '1.98 positions better than baseline',
 };
 
 // ── Confidence badge ──────────────────────────────────────────────────────────
@@ -263,10 +259,28 @@ const PredictionCard = ({ prediction, index, type }) => {
               <span>{prediction.constructor}</span>
               <span className="text-gray-700">·</span>
               <span>P{prediction.championship} championship</span>
-              {prediction.gridPosition <= 3 && (
+              {type === 'race' && prediction.gridPosition === 1 && (
+                <>
+                  <span className="text-gray-700">·</span>
+                  <span className="text-yellow-400 font-bold">⚡ Pole Position (P1)</span>
+                </>
+              )}
+              {type === 'race' && prediction.gridPosition > 1 && prediction.gridPosition <= 3 && (
                 <>
                   <span className="text-gray-700">·</span>
                   <span className="text-yellow-400">⚡ Grid P{prediction.gridPosition}</span>
+                </>
+              )}
+              {type === 'race' && prediction.gridPosition >= 15 && (
+                <>
+                  <span className="text-gray-700">·</span>
+                  <span className="text-cyan-400 font-medium">Grid P{prediction.gridPosition}</span>
+                </>
+              )}
+              {type === 'qualifying' && prediction.rank <= 3 && (
+                <>
+                  <span className="text-gray-700">·</span>
+                  <span className="text-yellow-400 font-bold">⚡ Front Row Contender</span>
                 </>
               )}
               {prediction.circuitAppearances >= 3 && prediction.circuitAvgFinish <= 5 && (
@@ -287,7 +301,7 @@ const PredictionCard = ({ prediction, index, type }) => {
             <div className="flex gap-2 mt-2">
               <span className="px-2 py-0.5 rounded text-[10px] font-bold"
                 style={{ background: `${tc}22`, color: tc }}>
-                ML predicted P{prediction.predictedPosition?.toFixed(1)}
+                {type === 'qualifying' ? `Predicted Quali P${prediction.predictedPosition?.toFixed(1)}` : `ML predicted P${prediction.predictedPosition?.toFixed(1)}`}
               </span>
               {prediction.dnfRate > 15 && (
                 <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-red-500/20 text-red-400">
@@ -313,7 +327,9 @@ const PredictionCard = ({ prediction, index, type }) => {
               <div className="text-sm font-bold text-gray-300">
                 {prediction.podiumProbability?.toFixed(1)}%
               </div>
-              <div className="text-[10px] text-gray-600 uppercase tracking-wider">Podium</div>
+              <div className="text-[10px] text-gray-600 uppercase tracking-wider">
+                {type === 'qualifying' ? 'Top 3' : 'Podium'}
+              </div>
             </div>
           )}
           <div className="text-[10px] text-gray-600 flex items-center gap-1">
@@ -802,9 +818,9 @@ const Predictions = () => {
                         <th className="text-left py-2 pr-3 text-gray-400 font-semibold">Driver</th>
                         <th className="text-left py-2 pr-3 text-gray-400 font-semibold">Team</th>
                         <th className="text-right py-2 px-2 text-gray-400 font-semibold">Pred Pos</th>
-                        <th className="text-right py-2 px-2 text-gray-400 font-semibold">Win %</th>
-                        <th className="text-right py-2 px-2 text-gray-400 font-semibold">Podium %</th>
-                        <th className="text-right py-2 px-2 text-gray-400 font-semibold">Grid</th>
+                        <th className="text-right py-2 px-2 text-gray-400 font-semibold">{type === 'qualifying' ? 'Pole %' : 'Win %'}</th>
+                        <th className="text-right py-2 px-2 text-gray-400 font-semibold">{type === 'qualifying' ? 'Top 3 %' : 'Podium %'}</th>
+                        <th className="text-right py-2 px-2 text-gray-400 font-semibold">{type === 'qualifying' ? 'Expected Quali' : 'Grid'}</th>
                         <th className="text-right py-2 px-2 text-gray-400 font-semibold">Champ</th>
                         <th className="text-right py-2 px-2 text-gray-400 font-semibold">Form L5</th>
                         <th className="text-right py-2 px-2 text-gray-400 font-semibold">DNF%</th>
@@ -835,7 +851,9 @@ const Predictions = () => {
                             <td className="py-2 px-2 text-right text-gray-300">
                               {pred.podiumProbability?.toFixed(1)}%
                             </td>
-                            <td className="py-2 px-2 text-right text-gray-400">P{pred.gridPosition}</td>
+                            <td className="py-2 px-2 text-right text-gray-400">
+                              {type === 'qualifying' ? `P${pred.rank}` : `P${pred.gridPosition}`}
+                            </td>
                             <td className="py-2 px-2 text-right text-gray-400">P{pred.championship}</td>
                             <td className="py-2 px-2 text-right text-gray-400">
                               {pred.recentAvgL5?.toFixed(1)}

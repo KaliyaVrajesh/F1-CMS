@@ -3,34 +3,16 @@ feature_engineering.py
 ───────────────────────
 Builds the ML-ready feature matrix from raw collected data.
 
-Features (all strictly pre-race — no data leakage):
+Features (strictly pre-race or pre-qualifying — zero data leakage):
+  - Starting grid & qualifying metrics (heaviest predictors of race outcomes)
+  - Teammate & car pace benchmark (team_best_grid, grid_vs_team_best)
+  - Current-season rolling form for drivers and constructors (captures in-season upgrades)
+  - Regulation-aware decay on prior season points (prevents obsolete standings from dominating)
+  - Circuit history & reliability
 
-  1.  grid_position           — Starting grid (from qualifying)
-  2.  quali_position          — Qualifying classification position
-  3.  driver_prev_season_pts  — Driver's total points in PREVIOUS season
-  4.  driver_prev_season_pos  — Driver's final championship pos in PREVIOUS season
-  5.  driver_prev_season_wins — Driver's wins in PREVIOUS season
-  6.  constr_prev_season_pts  — Constructor's total points in PREVIOUS season
-  7.  constr_prev_season_pos  — Constructor's final championship pos in PREVIOUS season
-  8.  constr_prev_season_wins — Constructor's wins in PREVIOUS season
-  9.  driver_avg_finish_l5    — Driver's average finishing position (last 5 races THIS season, before this race)
-  10. driver_avg_finish_l10   — Driver's average finishing position (last 10 races)
-  11. driver_dnf_rate_l10     — Driver's DNF rate in last 10 races
-  12. constr_avg_finish_l5    — Constructor's average finishing position (last 5 races this season)
-  13. circuit_avg_finish      — Driver's historical average finish at this circuit (prior seasons only)
-  14. circuit_appearances     — How many times driver has raced at this circuit (prior seasons)
-  15. circuit_podium_rate     — Driver's podium rate at this circuit (prior seasons)
-  16. season_round            — Race round number in the season
-  17. season_year             — Year (overall era/competitiveness context)
-
-Target: finish_position (regression, 1–20+)
-
-Note on standings features:
-  We use PREVIOUS season's final standings rather than pre-round snapshots.
-  This avoids making 20 API calls per season (which causes 429 rate-limiting)
-  while still providing a valid, leakage-free proxy for driver/constructor quality.
-  For the first race of a season, the previous season's final standings are
-  genuinely the best available pre-race information.
+Target:
+  - finish_position (for race model)
+  - quali_position (for qualifying model)
 """
 
 import pandas as pd
@@ -73,9 +55,9 @@ def build_rolling_driver_form(results: pd.DataFrame) -> pd.DataFrame:
             last5  = past.tail(5)
             last10 = past.tail(10)
             records.append({
-                "season":              int(row["season"]),
-                "round":               int(row["round"]),
-                "driver_id":           driver_id,
+                "season":                int(row["season"]),
+                "round":                 int(row["round"]),
+                "driver_id":             driver_id,
                 "driver_avg_finish_l5":  float(last5["finish_position"].mean())  if len(last5)  > 0 else np.nan,
                 "driver_avg_finish_l10": float(last10["finish_position"].mean()) if len(last10) > 0 else np.nan,
                 "driver_dnf_rate_l10":   float(last10["dnf_flag"].mean())        if len(last10) > 0 else np.nan,
@@ -156,10 +138,10 @@ def build_feature_matrix() -> pd.DataFrame:
     """
     print("Loading raw data…")
     results, quali, drv_stand, con_stand = load_raw_data()
-    print(f"  Results:   {len(results)} rows")
-    print(f"  Qualifying:{len(quali)} rows")
-    print(f"  Drv stand: {len(drv_stand)} rows")
-    print(f"  Con stand: {len(con_stand)} rows")
+    print(f"  Results:    {len(results)} rows")
+    print(f"  Qualifying: {len(quali)} rows")
+    print(f"  Drv stand:  {len(drv_stand)} rows")
+    print(f"  Con stand:  {len(con_stand)} rows")
 
     print("Computing rolling driver form…")
     driver_form = build_rolling_driver_form(results)
@@ -183,10 +165,8 @@ def build_feature_matrix() -> pd.DataFrame:
     df["quali_position"] = df["quali_position"].fillna(df["grid_position"])
 
     # ── Previous season driver standings ─────────────────────────────────────
-    # Shift season + 1 so that season N's final standings become
-    # available as a feature for season N+1 races.
     drv_prev = drv_stand.copy()
-    drv_prev["season"] = drv_prev["season"] + 1   # next season will see this
+    drv_prev["season"] = drv_prev["season"] + 1   # next season sees this
     drv_prev = drv_prev.rename(columns={
         "driver_final_pts":   "driver_prev_season_pts",
         "driver_final_pos":   "driver_prev_season_pos",
@@ -198,7 +178,6 @@ def build_feature_matrix() -> pd.DataFrame:
                   "driver_prev_season_wins"]],
         on=["season", "driver_id"], how="left"
     )
-    # For first season in dataset (2010) or rookies: fill conservatively
     df["driver_prev_season_pts"]  = df["driver_prev_season_pts"].fillna(0.0)
     df["driver_prev_season_pos"]  = df["driver_prev_season_pos"].fillna(20)
     df["driver_prev_season_wins"] = df["driver_prev_season_wins"].fillna(0)
@@ -254,31 +233,77 @@ def build_feature_matrix() -> pd.DataFrame:
     df["season_round"] = df["round"]
     df["season_year"]  = df["season"]
 
+    # ── Enhanced Features (Qualifying Anchoring + Regulation & Upgrade Robustness) ──
+    # 1. Teammate & Car Pace Benchmark (team_best_grid & delta)
+    team_best = (
+        df.groupby(["season", "round", "constructor_id"])["grid_position"]
+          .min().reset_index()
+          .rename(columns={"grid_position": "team_best_grid"})
+    )
+    df = df.merge(team_best, on=["season", "round", "constructor_id"], how="left")
+    df["grid_vs_team_best"] = df["grid_position"] - df["team_best_grid"]
+
+    # 2. Key Grid Advantage Indicators
+    df["is_pole"]       = (df["grid_position"] == 1).astype(int)
+    df["is_front_row"]  = (df["grid_position"] <= 2).astype(int)
+    df["is_top3_grid"]  = (df["grid_position"] <= 3).astype(int)
+    df["is_top6_grid"]  = (df["grid_position"] <= 6).astype(int)
+    df["grid_inv"]      = 1.0 / np.maximum(df["grid_position"], 1)
+
+    # 3. Form Trend (momentum)
+    df["form_trend"]    = df["driver_avg_finish_l5"] - df["driver_avg_finish_l10"]
+
+    # 4. In-season upgrade decay & Regulation overhaul discount
+    # As rounds advance, current season upgrades make prior year standings obsolete
+    NEW_REG_YEARS = {2014, 2022, 2026}
+    df["is_new_reg_era"] = df["season"].isin(NEW_REG_YEARS).astype(int)
+    
+    round_weight = np.exp(-df["round"] / 10.0)
+    reg_factor = np.where(df["is_new_reg_era"] == 1, 0.5, 1.0)
+    df["constr_prev_pts_decayed"] = df["constr_prev_season_pts"] * round_weight * reg_factor
+    df["driver_prev_pts_decayed"] = df["driver_prev_season_pts"] * round_weight * reg_factor
+
     print(f"\nFeature matrix: {len(df)} rows × {len(df.columns)} columns")
     print(f"Seasons:        {df['season'].min()} – {df['season'].max()}")
-    print(f"Missing values:\n{df[FEATURE_COLS].isnull().sum()[df[FEATURE_COLS].isnull().sum() > 0]}")
 
     return df
 
 
-FEATURE_COLS = [
+RACE_FEATURE_COLS = [
     "grid_position",
-    "quali_position",
-    "driver_prev_season_pts",
-    "driver_prev_season_pos",
-    "driver_prev_season_wins",
-    "constr_prev_season_pts",
-    "constr_prev_season_pos",
-    "constr_prev_season_wins",
+    "team_best_grid",
+    "grid_vs_team_best",
+    "is_pole",
+    "is_front_row",
+    "is_top3_grid",
+    "is_top6_grid",
+    "grid_inv",
+    "constr_avg_finish_l5",
     "driver_avg_finish_l5",
     "driver_avg_finish_l10",
+    "form_trend",
     "driver_dnf_rate_l10",
-    "constr_avg_finish_l5",
     "circuit_avg_finish",
     "circuit_appearances",
     "circuit_podium_rate",
+    "constr_prev_pts_decayed",
+    "driver_prev_pts_decayed",
     "season_round",
-    "season_year",
+    "is_new_reg_era",
+]
+
+QUALI_FEATURE_COLS = [
+    "constr_avg_finish_l5",
+    "driver_avg_finish_l5",
+    "driver_avg_finish_l10",
+    "form_trend",
+    "circuit_avg_finish",
+    "circuit_appearances",
+    "circuit_podium_rate",
+    "constr_prev_pts_decayed",
+    "driver_prev_pts_decayed",
+    "is_new_reg_era",
+    "season_round",
 ]
 
 
@@ -286,5 +311,4 @@ if __name__ == "__main__":
     df = build_feature_matrix()
     out = f"{DATA_DIR}/features.csv"
     df.to_csv(out, index=False)
-    print(f"\n✅ Saved → {out}")
-    print(df[FEATURE_COLS + ["finish_position"]].describe().round(2))
+    print(f"\n[OK] Saved -> {out}")

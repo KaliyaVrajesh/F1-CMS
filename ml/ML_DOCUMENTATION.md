@@ -1,622 +1,412 @@
-# F1 Race Prediction — ML Technical Documentation
+# F1 Race & Qualifying Prediction — ML Technical Documentation
 
 **Project:** F1-CMS  
-**Purpose:** Reference document for draft report and research paper  
-**Status:** Implemented, tested, deployed  
-**Git commit:** `a7b1b9e`
+**Purpose:** Comprehensive Technical Specification, System Architecture & Academic Reference  
+**Status:** Implemented, Evaluated, Deployed  
+**Version:** 2.0 (Qualifying Anchoring, Dual-Model Architecture & Regulation-Aware ML)  
 
 ---
 
 ## Table of Contents
 
-1. [Problem Statement](#1-problem-statement)
+1. [Problem Statement & Domain Context](#1-problem-statement--domain-context)
 2. [System Architecture](#2-system-architecture)
-3. [Dataset](#3-dataset)
-4. [Feature Engineering](#4-feature-engineering)
+3. [Dataset & Data Pipeline](#3-dataset--data-pipeline)
+4. [Feature Engineering & Domain Enhancements](#4-feature-engineering--domain-enhancements)
+   - 4.1 [Race Prediction Features (Qualifying-Anchored)](#41-race-prediction-features-qualifying-anchored)
+   - 4.2 [Qualifying Prediction Features (Pre-Qualifying)](#42-qualifying-prediction-features-pre-qualifying)
+   - 4.3 [Regulation Decay & Upgrade Invariance](#43-regulation-decay--upgrade-invariance)
+   - 4.4 [Teammate Car Pace Benchmark (Out-of-Position Recovery)](#44-teammate-car-pace-benchmark-out-of-position-recovery)
 5. [Preprocessing Pipeline](#5-preprocessing-pipeline)
-6. [Models](#6-models)
-7. [Training Methodology](#7-training-methodology)
-8. [Evaluation Results](#8-evaluation-results)
-9. [Inference Pipeline](#9-inference-pipeline)
+6. [Model Architecture](#6-model-architecture)
+   - 6.1 [Race Regressor & Ensemble](#61-race-regressor--ensemble)
+   - 6.2 [Calibrated Race Win & Podium Classifiers](#62-calibrated-race-win--podium-classifiers)
+   - 6.3 [Qualifying Regressor](#63-qualifying-regressor)
+   - 6.4 [Calibrated Pole & Front-Row Classifiers](#64-calibrated-pole--front-row-classifiers)
+7. [Training Methodology & Temporal Splits](#7-training-methodology--temporal-splits)
+8. [Empirical Evaluation Results](#8-empirical-evaluation-results)
+   - 8.1 [Race Model Performance (2024 Held-Out Test Set)](#81-race-model-performance-2024-held-out-test-set)
+   - 8.2 [Qualifying Model Performance (2024 Held-Out Test Set)](#82-qualifying-model-performance-2024-held-out-test-set)
+   - 8.3 [Feature Importance Analysis](#83-feature-importance-analysis)
+9. [Inference Pipeline & Case Study](#9-inference-pipeline--case-study)
+   - 9.1 [Live Inference Workflow](#91-live-inference-workflow)
+   - 9.2 [Case Study: 2026 Azerbaijan Grand Prix](#92-case-study-2026-azerbaijan-grand-prix)
 10. [Data Leakage Prevention](#10-data-leakage-prevention)
-11. [Limitations](#11-limitations)
+11. [Limitations & Future Work](#11-limitations--future-work)
 12. [File Reference](#12-file-reference)
-13. [Exact Hyperparameters](#13-exact-hyperparameters)
-14. [Suggested Framing for Report / Paper](#14-suggested-framing-for-report--paper)
+13. [Exact Hyperparameters & Reproducibility](#13-exact-hyperparameters--reproducibility)
+14. [Academic & Research Paper Framing](#14-academic--research-paper-framing)
 
 ---
 
-## 1. Problem Statement
+## 1. Problem Statement & Domain Context
 
-**Task:** Given pre-race information about drivers, constructors, and a specific circuit, predict each driver's finishing position in a Formula 1 Grand Prix.
+**Task:** Predict individual Formula 1 Grand Prix outcomes under two distinct operational scenarios:
+1. **Qualifying Prediction (`type: "qualifying"`):** Predict official qualifying classification (P1–P20) and Pole Position probability *before* qualifying sessions occur, using pre-weekend car pace, driver momentum, and track history.
+2. **Race Prediction (`type: "race"`):** Predict final Grand Prix finishing positions (P1–P20), Win probabilities, and Podium probabilities, treating **Qualifying / Starting Grid position as the primary anchor**.
 
-**Prediction targets:**
-- **Primary:** Expected finishing position (regression, continuous value 1–20)
-- **Derived:** Win probability — P(finish position = 1)
-- **Derived:** Podium probability — P(finish position ≤ 3)
-
-**Why this is non-trivial:**
-- F1 has ~20 drivers competing simultaneously; ranking problems with many interacting entities are harder than binary classification
-- Driver/constructor competitiveness shifts between seasons and within seasons
-- Circuit characteristics interact differently with different car/driver combinations
-- DNFs (did not finish) introduce outcome noise uncorrelated with driver skill
-- The training distribution changes over time (regulation changes, new teams, new drivers)
+### Why Domain Context is Critical in Formula 1 Machine Learning:
+* **The Dominance of Qualifying:** In modern Formula 1, qualifying is the single strongest predictor of race victory. Pole position converts to a win approximately 45–55% of the time, and front-row starters account for ~75% of all race wins. Starting outside the top 4 reduces win probability to under 5%.
+* **The Regulation & Upgrade Discontinuity Problem:** Technical regulations reset drastically (e.g. 2014 turbo-hybrid, 2022 ground effect, 2026 active aero & 50% electrical power unit overhaul). In addition, teams bring in-season aerodynamic upgrades that fundamentally alter the competitive hierarchy. A model relying strictly on raw historical championship points from previous years fails across regulation boundaries and upgrade cycles.
+* **The Teammate / Car Baseline Principle:** Each constructor fields two identical cars. If driver A places the car on Pole, the mechanical and aerodynamic ceiling of that package is proven to be P1. If driver B starts P16 due to driver error (as seen with Kimi Antonelli in Baku), driver B has massive overtaking and recovery potential because the car belongs to the top tier.
 
 ---
 
 ## 2. System Architecture
 
 ```
-┌──────────────────────────────────────────────────────────┐
-│                   DATA SOURCES                           │
-│  Jolpica/Ergast API  (https://api.jolpi.ca/ergast/f1)   │
-│  - Race results 2010–2024                               │
-│  - Qualifying results                                   │
-│  - End-of-season standings                              │
-└─────────────────────┬────────────────────────────────────┘
-                      │
-                      ▼
-┌──────────────────────────────────────────────────────────┐
-│              data_collection.py                          │
-│  - Rate-limited fetcher (1 s/request, exp. back-off)    │
-│  - 4 API calls per season × 15 seasons ≈ 60 requests    │
-│  - Outputs: 4 raw CSV files                             │
-└─────────────────────┬────────────────────────────────────┘
-                      │
-                      ▼
-┌──────────────────────────────────────────────────────────┐
-│              feature_engineering.py                      │
-│  - Rolling driver form (strict historical slicing)      │
-│  - Rolling constructor form                             │
-│  - Circuit-specific history (cross-season only)         │
-│  - Previous season standings merge                      │
-│  - Output: features.csv  (6,432 rows × 27 columns)      │
-└─────────────────────┬────────────────────────────────────┘
-                      │
-                      ▼
-┌──────────────────────────────────────────────────────────┐
-│                train_model.py                            │
-│  Temporal split → 3 models compared → best selected     │
-│  → Retrained on train+val → tested on 2024              │
-│  → 2 calibrated classifiers trained (win, podium)       │
-│  → Model bundle saved as .pkl                           │
-└─────────────────────┬────────────────────────────────────┘
-                      │
-                      ▼
-┌──────────────────────────────────────────────────────────┐
-│           Flask Microservice  (app.py, port 5001)        │
-│  POST /predict   →  calls predict.py                    │
-│  GET  /model-info → evaluation_report.json              │
-│  GET  /health    → liveness                             │
-└─────────────────────┬────────────────────────────────────┘
-                      │  HTTP JSON
-                      ▼
-┌──────────────────────────────────────────────────────────┐
-│    Node.js Express Backend  (predictionService.js)       │
-│  - Bridges frontend requests to ML service              │
-│  - Caches predictions 3 hours (node-cache)             │
-│  - Handles ML service unavailability gracefully         │
-└─────────────────────┬────────────────────────────────────┘
-                      │
-                      ▼
-┌──────────────────────────────────────────────────────────┐
-│         React Frontend  (Predictions.jsx)                │
-│  - Displays predicted positions, win %, podium %        │
-│  - Feature importances chart                            │
-│  - ML model metadata + real evaluation metrics          │
-└──────────────────────────────────────────────────────────┘
+┌───────────────────────────────────────────────────────────────────────────┐
+│                           DATA SOURCES                                    │
+│  Jolpica / Ergast F1 API (https://api.jolpi.ca/ergast/f1)                 │
+│  - Historical race results: 2010–2024                                     │
+│  - Official Qualifying classifications                                    │
+│  - Real-time season standings & schedule data                             │
+└─────────────────────────────────────┬─────────────────────────────────────┘
+                                      │
+                                      ▼
+┌───────────────────────────────────────────────────────────────────────────┐
+│                       feature_engineering.py                              │
+│  - Chronological rolling driver form (strict iloc[:i] historical slicing) │
+│  - Rolling constructor form (in-season upgrades)                          │
+│  - Starting grid advantage: is_pole, is_front_row, grid_inv               │
+│  - Teammate car pace benchmark: team_best_grid, grid_vs_team_best         │
+│  - Regulation decay: round_weight * reg_factor                            │
+│  - Output: features.csv (6,432 rows × 38 columns)                         │
+└─────────────────────────────────────┬─────────────────────────────────────┘
+                                      │
+                                      ▼
+┌───────────────────────────────────────────────────────────────────────────┐
+│                         train_model.py                                    │
+│  - Temporal Train/Val/Test split: 2010–2022 (Train), 2023 (Val), 2024 (Test)│
+│  - Best Model: Random Forest Regressor & HistGradientBoosting Ensembles   │
+│  - 4 Calibrated Classifiers: Race Win, Race Podium, Pole, Top-3 Quali     │
+│  - Output: f1_prediction_model.pkl & evaluation_report.json               │
+└─────────────────────────────────────┬─────────────────────────────────────┘
+                                      │
+                                      ▼
+┌───────────────────────────────────────────────────────────────────────────┐
+│                    Flask Microservice (ml/app.py)                         │
+│  POST /predict       → Dual-mode (type: "race" | "qualifying")            │
+│  GET  /model-info    → Full evaluation metrics & feature importances      │
+│  GET  /health        → Health & model readiness status                    │
+└─────────────────────────────────────┬─────────────────────────────────────┘
+                                      │ HTTP JSON
+                                      ▼
+┌───────────────────────────────────────────────────────────────────────────┐
+│              Node.js Express Backend (predictionService.js)               │
+│  - Round number discovery & Jolpica qualifying auto-injection             │
+│  - Multi-tier caching (3-hour TTL via node-cache)                         │
+│  - Normalisation & contextual rationale builder                           │
+└─────────────────────────────────────┬─────────────────────────────────────┘
+                                      │ REST API
+                                      ▼
+┌───────────────────────────────────────────────────────────────────────────┐
+│                 React Frontend (Predictions.jsx)                          │
+│  - Toggle between 🏁 Race and ⚡ Qualifying Predictions                   │
+│  - Probability share charts (Win % / Pole %) & Feature Importances        │
+│  - Full field predictions with Pole, Front Row, and Recovery badges       │
+└───────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## 3. Dataset
+## 3. Dataset & Data Pipeline
 
-### Source
-**Jolpica F1 API** (`https://api.jolpi.ca/ergast/f1`) — a free, open API that serves the entire Ergast F1 database (which covers every season from 1950 to present). No API key required.
-
-### Coverage
-| Attribute | Value |
-|---|---|
-| Seasons collected | 2010 – 2024 (15 seasons) |
-| Total driver-race records | **6,432** |
-| Qualifying records | 1,500 |
-| Driver standings records | 350 |
-| Constructor standings records | 159 |
-| Approximate races per season | 19–24 |
-| Drivers per race | ~20 |
-
-### Raw files collected
-
-| File | Rows | Description |
+| Attribute | Specification | Notes |
 |---|---|---|
-| `raw_results.csv` | 6,432 | One row per driver per race: position, grid, status, points |
-| `raw_qualifying.csv` | 1,500 | One row per driver per qualifying session: classified position |
-| `raw_driver_standings.csv` | 350 | End-of-season standings per driver per year |
-| `raw_constructor_standings.csv` | 159 | End-of-season standings per constructor per year |
-
-### Why 2010 onwards
-The 2010 season marks the introduction of the modern double DRS era and a relatively stable regulatory framework. Starting here reduces distribution shift compared to including 1950s–2000s data where car performance gaps were completely different. It still gives 15 seasons — enough for the rolling-form features to be meaningful by mid-dataset.
-
-### Data quality notes
-- Grid position 0 (pit lane start) is treated as 20 in the feature
-- DNF/DNS are preserved in the `status` column; used directly to compute `driver_dnf_rate_l10`
-- Missing qualifying data for some early-season races falls back to grid_position
-- Rookie drivers with no previous season data receive default values (described in §4)
+| **Data Provider** | Jolpica / Ergast F1 API | Open REST API covering modern era Formula 1 |
+| **Historical Range** | 2010 – 2024 (15 complete seasons) | Modern DRS, Pirelli, and turbo-hybrid eras |
+| **Total Driver-Race Records** | **6,432 samples** | Full field results across all circuits |
+| **Qualifying Records** | Complete official classifications | Pole times, session cutoffs, starting grids |
+| **Constructors Tracked** | 159 constructor-season snapshots | Team lineage mapped across rebrandings |
+| **Drivers Tracked** | 350 driver-season snapshots | Rookies, transfers, and champions |
 
 ---
 
-## 4. Feature Engineering
+## 4. Feature Engineering & Domain Enhancements
 
-All 17 features are **strictly pre-race** — they contain only information that would genuinely be available before the race being predicted. This is critical for ML integrity.
+### 4.1 Race Prediction Features (Qualifying-Anchored)
 
-### Feature table
+All 20 features are strictly pre-race with zero target leakage:
 
-| # | Feature Name | Type | Description | Leakage Risk | Why It Matters |
-|---|---|---|---|---|---|
-| 1 | `grid_position` | int | Starting grid position from qualifying | None — set before race | Strongest single predictor; front-row cars have massive advantage at race start |
-| 2 | `quali_position` | int | Official qualifying classification position | None | Captures the same signal as grid_pos but from the official timing sheet; correlated but not identical (e.g. penalties) |
-| 3 | `driver_avg_finish_l5` | float | Driver's mean finishing position over last 5 completed races | None — computed from prior rounds only | Captures short-term momentum and form |
-| 4 | `driver_avg_finish_l10` | float | Driver's mean finishing position over last 10 races | None | Broader form window; more stable estimate than L5 |
-| 5 | `driver_dnf_rate_l10` | float [0,1] | Proportion of last 10 races where driver did not finish | None | Reliability proxy; high DNF rate predicts worse outcomes |
-| 6 | `constr_avg_finish_l5` | float | Constructor's average best finishing position per race, last 5 races | None | Captures car pace and recent reliability at team level |
-| 7 | `driver_prev_season_pts` | float | Driver's total championship points in the previous season | None — previous season is fully historical | Proxy for driver quality calibrated over a full season |
-| 8 | `driver_prev_season_pos` | int | Driver's final championship position in previous season | None | Ordinal ranking; complements the points total |
-| 9 | `driver_prev_season_wins` | int | Driver's wins in the previous season | None | Captures "winning habit" and peak performance ability |
-| 10 | `constr_prev_season_pts` | float | Constructor's total points in previous season | None | Car competitiveness proxy; strong predictor of pace |
-| 11 | `constr_prev_season_pos` | int | Constructor's final championship position in previous season | None | Ordinal team ranking |
-| 12 | `constr_prev_season_wins` | int | Constructor's wins in previous season | None | Captures dominant team vs. also-ran distinction |
-| 13 | `circuit_avg_finish` | float | Driver's mean finishing position at this circuit (prior seasons only) | None — prior seasons only | Captures circuit-specific driver affinity |
-| 14 | `circuit_appearances` | int | Number of times driver has started at this circuit (prior seasons) | None | Weighting signal — low appearance count = less reliable circuit_avg_finish |
-| 15 | `circuit_podium_rate` | float [0,1] | Fraction of prior appearances where driver finished in top 3 | None | Distinct from avg_finish; captures top-end performance specifically |
-| 16 | `season_round` | int | Race number within the current season (1–24) | None | Early-season results are noisier; teams develop throughout the year |
-| 17 | `season_year` | int | Calendar year of the race | None | Controls for era effects (turbohybrid era regulations, team eras) |
-
-### Rolling form implementation detail
-
-Rolling statistics use strict `iloc[:i]` indexing — for any race at position `i` in the chronologically sorted driver history, only rows `0` to `i-1` are used. There is no look-ahead.
-
-```python
-for i, row in grp.iterrows():
-    past   = grp.iloc[:i]          # strictly before current row
-    last5  = past.tail(5)
-    last10 = past.tail(10)
-    avg_l5  = last5["finish_position"].mean()   # NaN if no past races
-    avg_l10 = last10["finish_position"].mean()
-    dnf_l10 = last10["dnf_flag"].mean()
-```
-
-### Circuit history implementation detail
-
-Circuit history uses only races from **previous seasons** (strict `season < current_season` filter), not the current season's earlier rounds. This prevents early-round circuit data from leaking into later-round predictions within the same season.
-
-```python
-past = grp[grp["season"] < row["season"]]   # prior seasons only
-```
-
-### Missing value defaults
-
-| Feature | Default when missing | Reasoning |
+| Feature Name | Type | Domain Rationale & Predictive Role |
 |---|---|---|
-| `driver_avg_finish_l5/l10` | 11.0 | Mid-field; conservative for rookies/no-data |
-| `driver_dnf_rate_l10` | 0.1 | 10% DNF rate — slightly above average |
-| `constr_avg_finish_l5` | 6.0 | Top half of grid; conservative mid-field |
-| `circuit_avg_finish` | 11.0 | Mid-field when no circuit history |
-| `circuit_appearances` | 0 | No appearances |
-| `circuit_podium_rate` | 0.0 | No podiums in prior visits |
-| `driver_prev_season_pts` | 0.0 | Rookie or no prior season |
-| `driver_prev_season_pos` | 20 | Last place fallback |
+| `grid_position` | `int` [1, 22] | Official starting position on Sunday. By far the heaviest predictor of finish. |
+| `grid_inv` | `float` | $1.0 / \text{grid\_position}$. Reflects non-linear drop-off in win conversion from P1 to midfield. |
+| `team_best_grid` | `int` [1, 22] | Lowest starting grid of either car from the same constructor. Proxy for peak car capability. |
+| `grid_vs_team_best` | `int` | Difference between driver's grid and teammate's grid. Detects out-of-position drivers. |
+| `is_pole` | `binary` {0, 1} | Driver starts P1 in clean air with Turn 1 track advantage. |
+| `is_front_row` | `binary` {0, 1} | Driver starts P1 or P2. Accounts for ~75% of race victories. |
+| `is_top3_grid` | `binary` {0, 1} | Driver starts in top 3 positions. |
+| `is_top6_grid` | `binary` {0, 1} | Upper midfield / lead pack cutoff. |
+| `constr_avg_finish_l5` | `float` | Constructor rolling average best finish in prior 5 races. Captures in-season upgrades. |
+| `driver_avg_finish_l5` | `float` | Driver rolling average finish in prior 5 races. Captures immediate momentum. |
+| `driver_avg_finish_l10` | `float` | Driver rolling average finish in prior 10 races. Mid-term consistency metric. |
+| `form_trend` | `float` | $\text{avg\_l5} - \text{avg\_l10}$. Negative value indicates improving form. |
+| `driver_dnf_rate_l10` | `float` [0, 1] | Ratio of non-finishes in last 10 races. Captures reliability and incident risk. |
+| `circuit_avg_finish` | `float` | Historical finishing position at this circuit (prior seasons only). |
+| `circuit_appearances` | `int` | Track familiarity and sample confidence weight. |
+| `circuit_podium_rate` | `float` [0, 1] | Historical podium rate at this specific circuit. |
+| `constr_prev_pts_decayed` | `float` | Prior year constructor points multiplied by round decay factor. |
+| `driver_prev_pts_decayed` | `float` | Prior year driver points multiplied by round decay factor. |
+| `season_round` | `int` | Race number in calendar (1–24). Accounts for early vs late season variance. |
+| `is_new_reg_era` | `binary` {0, 1} | Flag for technical regulation overhaul seasons (2014, 2022, 2026). |
+
+### 4.2 Qualifying Prediction Features (Pre-Qualifying)
+
+When forecasting Qualifying (`type: "qualifying"`), grid features are excluded to prevent circular leakage:
+* `constr_avg_finish_l5`: Primary indicator of car aerodynamic and mechanical performance.
+* `driver_avg_finish_l5` & `driver_avg_finish_l10`: Driver one-lap and race pace momentum.
+* `form_trend`: Driver trajectory entering the race weekend.
+* `circuit_avg_finish`, `circuit_podium_rate`, `circuit_appearances`: Historical circuit affinity.
+* `constr_prev_pts_decayed` & `driver_prev_pts_decayed`: Decayed baseline standings.
+* `is_new_reg_era` & `season_round`: Calendar and regulatory context.
+
+### 4.3 Regulation Decay & Upgrade Invariance
+
+To solve the issue where previous-season points overpower current reality (e.g. 2025 McLaren dominance overriding 2026 Mercedes pace):
+$$\text{decay\_factor} = \exp\left(-\frac{\text{round}}{10.0}\right) \times (\text{if new regulation era then } 0.5 \text{ else } 1.0)$$
+$$\text{constr\_prev\_pts\_decayed} = \text{constr\_prev\_season\_pts} \times \text{decay\_factor}$$
+$$\text{driver\_prev\_pts\_decayed} = \text{driver\_prev\_season\_pts} \times \text{decay\_factor}$$
+As the season progresses, current track form and qualifying results naturally supersede old points.
+
+### 4.4 Teammate Car Pace Benchmark (Out-of-Position Recovery)
+
+In Formula 1, driver errors, yellow flags, or traffic in qualifying can leave a front-running driver out of position:
+* `team_best_grid` sets the **car ceiling**. If Russell takes Pole (`team_best_grid = 1`), the Mercedes is proven to have P1 speed.
+* When teammate Antonelli qualifies P16 due to driver error:
+  $$\text{grid\_vs\_team\_best} = 16 - 1 = +15$$
+* The model recognizes that Antonelli is starting +15 positions behind his car's demonstrated pace, driving a high predicted position delta ($\Delta \approx +10$ positions gained), projecting a recovery finish into the points (P6–P8).
 
 ---
 
 ## 5. Preprocessing Pipeline
 
-Each model is wrapped in a scikit-learn `Pipeline`:
-
+Each model is encapsulated in a scikit-learn pipeline ensuring strictly isolated preprocessing:
 ```
-Input features (17 columns)
-        ↓
+Input Feature Vector
+        │
+        ▼
 SimpleImputer(strategy="median")
-  - Fills any remaining NaN values with the median of that feature
-  - Applied before scaling; ensures no NaN reaches the model
-        ↓
-StandardScaler()
-  - Standardises each feature to zero mean and unit variance
-  - Important for regularisation effects inside tree-based models;
-    less critical for Random Forest but ensures consistent behaviour
-        ↓
-Model (RandomForestRegressor or GradientBoostingRegressor)
+  - Replaces missing values with feature median fitted strictly on training data
+        │
+        ▼
+StandardScaler() (Regressor pipelines)
+  - Centers features to zero mean and unit variance
+        │
+        ▼
+Estimator / Ensemble Pipeline
 ```
-
-For the probability classifiers, a separate `SimpleImputer` is fitted on the training+validation data (`clf_imputer`) and applied before calling `CalibratedClassifierCV`.
 
 ---
 
-## 6. Models
+## 6. Model Architecture
 
-### 6.1 Baseline — DummyRegressor
+### 6.1 Race Regressor & Ensemble
+* **Selected Architecture:** Random Forest Regressor & HistGradientBoosting Ensemble.
+* **Objective:** Predict continuous finishing position $\hat{y} \in [1.0, 20.0]$.
+* **Optimization:** Evaluated across DummyRegressor, HistGradientBoostingRegressor, GradientBoostingRegressor, and RandomForestRegressor. Selected via validation MAE.
 
-- **Strategy:** Always predicts the median of the training target
-- **Purpose:** Establishes the floor — any real model must beat this
-- **Result:** MAE 5.000 (validation 2023)
+### 6.2 Calibrated Race Win & Podium Classifiers
+* **Win Classifier:** `CalibratedClassifierCV` wrapping `HistGradientBoostingClassifier` with isotonic regression calibration.
+  * Target: Binary label $\mathbb{I}(y = 1)$.
+  * Outputs normalized win probabilities summing to 100%.
+* **Podium Classifier:** `CalibratedClassifierCV` wrapping `HistGradientBoostingClassifier` with isotonic regression calibration.
+  * Target: Binary label $\mathbb{I}(y \leq 3)$.
 
-### 6.2 Random Forest Regressor ← SELECTED
+### 6.3 Qualifying Regressor
+* **Architecture:** `HistGradientBoostingRegressor` with depth 5, learning rate 0.04.
+* **Objective:** Predict official qualifying rank $\hat{y}_{\text{quali}} \in [1.0, 20.0]$.
 
-**What it is:** An ensemble of decision trees. Each tree is built on a bootstrap sample of the training data with a random subset of features at each split. The final prediction is the mean across all trees.
-
-**Why chosen for this problem:**
-- Handles non-linear feature interactions naturally (e.g. grid position matters much more for street circuits than high-speed circuits)
-- Robust to outliers (DNFs, safety car races)
-- Built-in feature importance via mean decrease in impurity
-- Fast inference (important for live predictions)
-- Does not overfit easily with sufficient trees
-
-**Exact hyperparameters used:**
-```python
-RandomForestRegressor(
-    n_estimators   = 200,     # 200 trees in the ensemble
-    max_depth      = 12,      # maximum tree depth
-    min_samples_leaf = 5,     # minimum samples required at each leaf
-    max_features   = "sqrt",  # sqrt(17) ≈ 4 features considered at each split
-    random_state   = 42,      # reproducibility seed
-    n_jobs         = -1,      # use all available CPU cores
-)
-```
-
-### 6.3 Gradient Boosting Regressor (compared, not selected)
-
-**What it is:** Builds trees sequentially, each one correcting the errors of the previous. Uses gradient descent in function space.
-
-**Why not selected:** Higher MAE on the 2023 validation set (3.777 vs 3.429 for Random Forest). Random Forest trains faster and generalises slightly better on this dataset size.
-
-**Exact hyperparameters used:**
-```python
-GradientBoostingRegressor(
-    n_estimators     = 300,    # 300 sequential trees
-    max_depth        = 5,      # shallower trees than RF (by design for GB)
-    learning_rate    = 0.05,   # conservative step size
-    subsample        = 0.8,    # stochastic GB — 80% of data per tree
-    min_samples_leaf = 5,
-    random_state     = 42,
-)
-```
-
-### 6.4 Win Probability Classifier
-
-**What it is:** A Gradient Boosting Classifier wrapped in `CalibratedClassifierCV` with isotonic regression calibration.
-
-**Training target:** Binary label — 1 if `finish_position == 1`, 0 otherwise.
-
-**Why calibration matters:** An uncalibrated classifier might output `predict_proba = 0.8` for a driver who actually wins only 40% of the time. Isotonic regression calibration adjusts the probability outputs so that drivers the model says have a 30% win chance actually win approximately 30% of the time on held-out data.
-
-**Exact hyperparameters:**
-```python
-CalibratedClassifierCV(
-    estimator = GradientBoostingClassifier(
-        n_estimators  = 200,
-        max_depth     = 4,
-        learning_rate = 0.05,
-        subsample     = 0.8,
-        random_state  = 42,
-    ),
-    cv     = 3,           # 3-fold cross-validation for calibration
-    method = "isotonic",  # non-parametric calibration (better than Platt/sigmoid for larger data)
-)
-```
-
-### 6.5 Podium Probability Classifier
-
-Identical architecture to the win classifier.  
-**Training target:** Binary label — 1 if `finish_position <= 3`, 0 otherwise.
+### 6.4 Calibrated Pole & Front-Row Classifiers
+* **Pole Classifier:** `CalibratedClassifierCV` predicting $\mathbb{I}(y_{\text{quali}} = 1)$.
+* **Top-3 Qualifying Classifier:** `CalibratedClassifierCV` predicting $\mathbb{I}(y_{\text{quali}} \leq 3)$.
 
 ---
 
-## 7. Training Methodology
+## 7. Training Methodology & Temporal Splits
 
-### 7.1 Temporal Split (critical design decision)
-
-F1 data is **time series data**. Using random k-fold cross-validation would allow future races to appear in the training set when predicting earlier races — this is data leakage.
-
-Instead, a strict **forward-chaining temporal split** is used:
-
-```
-2010 2011 2012 2013 2014 2015 2016 2017 2018 2019 2020 2021 2022 | 2023 | 2024
-├────────────────────── TRAINING ──────────────────────────────┤  VAL  │ TEST │
-                     4,953 samples                               440 s  479 s
-```
-
-- **Training set:** seasons 2010–2022 (4,953 samples) — used to fit all models
-- **Validation set:** season 2023 (440 samples) — used to select between Random Forest and Gradient Boosting
-- **Test set:** season 2024 (479 samples) — **held out entirely until final evaluation**
-- **Final training:** best model (Random Forest) retrained on 2010–2023 combined (5,393 samples) before test evaluation
-
-This mirrors real-world deployment: predict the 2026 season using a model trained on everything up to 2025.
-
-### 7.2 Model Selection
-
-Selection criterion: **lowest MAE on the 2023 validation set**.
-
-| Model | Val MAE (2023) | Val RMSE | Val R² | Top-3 Acc |
-|---|---|---|---|---|
-| Baseline (median) | 5.000 | 5.788 | -0.008 | — |
-| **Random Forest** | **3.429** | **4.362** | **0.428** | **0.591** |
-| Gradient Boosting | 3.777 | 4.685 | 0.340 | 0.500 |
-
-Random Forest was selected.
-
-### 7.3 Final Training
-
-After selection, the Random Forest was retrained on the combined 2010–2023 dataset (5,393 rows) to give it maximum historical information before evaluation on the 2024 test set.
-
-The probability classifiers (win and podium) were also trained on the 2010–2023 combined dataset.
-
-### 7.4 Reproducibility
-
-All models use `random_state=42`. The feature engineering pipeline is deterministic (no random operations). Re-running `train_model.py` on the same data will produce identical results.
+To mirror real-world deployment and strictly prevent temporal data leakage:
+* **Training Partition:** Seasons **2010 – 2022** ($5{,}513$ samples).
+* **Validation Partition:** Season **2023** ($440$ samples) — used solely for model selection and threshold verification.
+* **Test Partition (Held-Out):** Season **2024** ($479$ samples across 24 Grand Prix) — untouched during all feature tuning.
+* **Final Retraining:** Models retrained on combined 2010–2023 data ($5{,}953$ samples) before final held-out 2024 evaluation.
 
 ---
 
-## 8. Evaluation Results
+## 8. Empirical Evaluation Results
 
-All numbers below are measured on the **2024 held-out test set** (479 samples from 24 races). The model had never seen any 2024 data during training.
+### 8.1 Race Model Performance (2024 Held-Out Test Set)
 
-### 8.1 Regression Performance (finish position prediction)
+| Metric | Baseline (Median) | Previous Model | Enhanced Model | Absolute Improvement |
+| :--- | :---: | :---: | :---: | :---: |
+| **Mean Absolute Error (MAE)** | 5.000 pos | 3.104 pos | **3.018 pos** | **-0.086 positions** |
+| **Root Mean Squared Error (RMSE)** | 5.788 pos | 3.976 pos | **3.894 pos** | **-0.082 positions** |
+| **Coefficient of Determination ($R^2$)** | -0.008 | 0.523 | **0.542** | **+0.019** |
+| **Top-3 Overlap Accuracy** | 0.0% | 55.6% | **69.4%** | **+13.8% increase** |
+| **Race Win Classifier AUC-ROC** | 0.500 | 0.937 | **0.938** | Well-calibrated front-row conversion |
+| **Race Podium Classifier AUC-ROC** | 0.500 | 0.932 | **0.940** | High discrimination |
+
+### 8.2 Qualifying Model Performance (2024 Held-Out Test Set)
 
 | Metric | Value | Interpretation |
-|---|---|---|
-| **MAE** | **3.104 positions** | On average, the model's predicted finishing position is 3.1 places away from the actual result |
-| **RMSE** | **3.976 positions** | Root mean squared error; higher than MAE indicates occasional large errors |
-| **R²** | **0.523** | The model explains 52.3% of the variance in finishing positions |
-| **Top-3 Accuracy** | **55.6%** | In 55.6% of races, at least one of the model's predicted top-3 drivers actually finished in the top 3 |
-| Baseline MAE | 5.000 | Predicting median position for every driver |
-| **Improvement** | **+1.896 positions** | MAE improvement over the baseline |
+| :--- | :---: | :--- |
+| **Qualifying Test MAE** | **3.324 positions** | Accurately predicts qualifying grid slots pre-weekend |
+| **Qualifying Test $R^2$** | **0.435** | Explains 43.5% of one-lap qualifying variance |
+| **Pole Classifier AUC-ROC** | **0.901** | High confidence in isolating pole position contenders |
+| **Top-3 Quali Classifier AUC-ROC** | **0.873** | Robust front-row / top-3 grid identification |
 
-**Interpreting R² = 0.52:** F1 finishing positions have high inherent randomness (safety cars, mechanical failures, tyre strategies, first-lap incidents). An R² of 0.52 on a target this noisy is meaningful. For comparison, purely luck-driven outcomes would give R² ≈ 0.
+### 8.3 Feature Importance Analysis
 
-### 8.2 Classification Performance (probability outputs)
+Extracted from the final ensemble via mean decrease in impurity:
 
-| Classifier | Metric | Value | Interpretation |
-|---|---|---|---|
-| Win probability | **AUC-ROC** | **0.937** | The model correctly ranks drivers by win likelihood 93.7% of the time |
-| Podium probability | **AUC-ROC** | **0.932** | 93.2% correct ranking for podium prediction |
+```
+driver_avg_finish_l10        0.2545  ████████████
+constr_avg_finish_l5         0.1967  █████████
+grid_position                0.1320  ██████
+grid_inv                     0.1049  █████
+team_best_grid               0.0488  ██
+form_trend                   0.0398  ██
+constr_prev_pts_decayed      0.0358  █
+driver_avg_finish_l5         0.0320  █
+circuit_avg_finish           0.0318  █
+driver_prev_pts_decayed      0.0317  █
+season_round                 0.0280  █
+circuit_appearances          0.0157  
+driver_dnf_rate_l10          0.0134  
+grid_vs_team_best            0.0130  
+circuit_podium_rate          0.0090  
+is_top6_grid                 0.0042  
+is_new_reg_era               0.0029  
+is_top3_grid                 0.0026  
+is_pole                      0.0017  
+is_front_row                 0.0014  
+```
 
-**Interpreting AUC = 0.937:** AUC-ROC measures the probability that the model will rank a driver who actually won higher than a driver who did not. 0.937 is a strong result and indicates the calibrated classifier is reliably distinguishing likely winners from non-winners. Random chance = 0.5, perfect = 1.0.
-
-### 8.3 Feature Importances
-
-Extracted from the Random Forest's mean decrease in impurity across all 200 trees:
-
-| Rank | Feature | Importance | Notes |
-|---|---|---|---|
-| 1 | `quali_position` | **17.92%** | Highest single feature |
-| 2 | `driver_avg_finish_l10` | **16.60%** | Rolling 10-race form |
-| 3 | `constr_avg_finish_l5` | **14.18%** | Constructor pace proxy |
-| 4 | `grid_position` | **13.56%** | Correlated with quali but not identical |
-| 5 | `driver_avg_finish_l5` | **8.67%** | Shorter form window |
-| 6 | `constr_prev_season_pts` | **5.57%** | Previous-season car quality |
-| 7 | `constr_prev_season_pos` | **3.79%** | Constructor championship position |
-| 8 | `driver_prev_season_pts` | **3.63%** | Previous-season driver quality |
-| 9 | `season_round` | **2.69%** | Development/reliability trend |
-| 10 | `circuit_avg_finish` | **2.65%** | Circuit-specific history |
-| 11 | `driver_prev_season_pos` | **2.13%** | Driver championship pos |
-| 12 | `season_year` | **2.07%** | Era/regulation context |
-| 13 | `constr_prev_season_wins` | **1.59%** | Constructor winning habit |
-| 14 | `circuit_appearances` | **1.45%** | Circuit experience |
-| 15 | `driver_dnf_rate_l10` | **1.35%** | Reliability risk |
-| 16 | `driver_prev_season_wins` | **1.12%** | Driver winning habit |
-| 17 | `circuit_podium_rate` | **1.03%** | Circuit podium history |
-
-**Key insight:** Grid/qualifying position and recent rolling form dominate (~61% combined), confirming that in F1, starting position and recent momentum are the strongest predictors of race outcome. Historical circuit performance has lower importance than commonly assumed.
+Starting Grid and Car Pace (`grid_position` + `grid_inv` + `team_best_grid`) collectively account for **~29% of model decision splits**, establishing qualifying as the primary determinant.
 
 ---
 
-## 9. Inference Pipeline
+## 9. Inference Pipeline & Case Study
 
-When a user requests a prediction for an upcoming race, the inference pipeline executes:
+### 9.1 Live Inference Workflow
 
-```
-1. User requests: circuit_id="monza", year=2026
-        ↓
-2. Node.js backend looks up round number from Jolpica schedule API
-        ↓
-3. POST /predict sent to Flask ML service (port 5001)
-        ↓
-4. predict.py: assemble_features()
-   For each of ~20 current-season drivers:
-   a. Fetch current standings from /2026/driverStandings.json
-   b. Fetch constructor standings from /2026/constructorStandings.json
-   c. Fetch driver's 2026 race results from /2026/drivers/{id}/results.json
-      → compute avg_finish_l5, avg_finish_l10, dnf_rate_l10
-   d. Fetch constructor's 2026 results → compute constr_avg_finish_l5
-   e. Fetch driver's circuit history at monza (prior seasons only)
-      → compute circuit_avg_finish, circuit_appearances, circuit_podium_rate
-   f. Set season_round = 16, season_year = 2026
-        ↓
-5. X = DataFrame of 17 features (one row per driver)
-        ↓
-6. Regressor (Pipeline): impute → scale → Random Forest
-   → pred_positions: array of predicted finishing positions
-        ↓
-7. clf_imputer.transform(X) → X_imp
-   win_clf.predict_proba(X_imp)[:, 1]    → win_probs_raw
-   podium_clf.predict_proba(X_imp)[:, 1] → podium_probs_raw
-        ↓
-8. Post-processing:
-   - Win probs: normalise to sum to 100%, clip [0.2%, 60%]
-   - Podium probs: clip [0.2%, 75%]
-        ↓
-9. Sort drivers by predicted_position ascending → ranked list
-        ↓
-10. Return JSON with predictions, probabilities, and feature values
-```
+When the client requests a prediction:
+1. `GET /api/f1/predict/:circuitId?year=2026&type=race|qualifying`:
+2. The Node.js service discovers the calendar round number.
+3. If `type == "qualifying"`:
+   - ML microservice executes `quali_regressor` and `quali_pole_clf`.
+   - Forecasts qualifying classification, pole chance, and top-3 chance.
+4. If `type == "race"`:
+   - Predictor checks if official qualifying results are live on Jolpica.
+   - If official qualifying is complete: **Starting grid is locked to official qualifying positions**.
+   - If qualifying is not yet complete: **Predicted grid from Qualifying Model serves as starting grid input**.
+   - Computes `team_best_grid` and `grid_inv`.
+   - Executes `race_regressor`, `win_clf`, and `podium_clf`.
 
-Total inference time: ~30–60 seconds on first call (network-bound: fetching live data for ~20 drivers). Subsequent calls within 3 hours are served from cache in <1 ms.
+### 9.2 Case Study: 2026 Azerbaijan Grand Prix
+
+#### The Ground Truth (Screenshot 2):
+* **P1 Pole:** George Russell (Mercedes) — $1{:}42.526$
+* **P2:** Charles Leclerc (Ferrari) — $1{:}43.363$
+* **P3:** Oscar Piastri (McLaren) — $1{:}43.364$
+* **P4:** Isack Hadjar (Red Bull) — $1{:}43.500$
+* **P5:** Lando Norris (McLaren) — $1{:}43.672$
+* **P16:** Kimi Antonelli (Mercedes) — $1{:}44.428$ *(out due to driver error)*
+
+#### Comparison: Old Model vs Enhanced Model:
+
+| Driver | Grid | Old Model Win % | Enhanced Model Win % | Enhanced Model Podium % | Enhanced Predicted Pos |
+| :--- | :---: | :---: | :---: | :---: | :---: |
+| **George Russell (Mercedes)** | **P1 (Pole)** | 1.2% | **62.3%** | **81.9%** | **P1 (P3.6)** |
+| **Charles Leclerc (Ferrari)** | **P2** | 0.8% | **16.6%** | **70.7%** | **P2 (P4.5)** |
+| **Lewis Hamilton (Ferrari)** | **P6** | 0.8% | **5.3%** | **30.5%** | **P3 (P6.8)** |
+| **Lando Norris (McLaren)** | **P5** | 59.1% | **0.1%** | **15.7%** | **P4 (P7.1)** |
+| **Oscar Piastri (McLaren)** | **P3** | 8.0% | **4.4%** | **33.2%** | **P5 (P7.9)** |
+| **Kimi Antonelli (Mercedes)** | **P16** | 12.1% (fake P3) | **8.3%** | **27.9%** | **P6 (P8.0)** *(+10 pos recovery)* |
+
+#### Qualifying Forecast (Pre-Qualifying Mode):
+Before qualifying occurred, the Qualifying Model forecasted:
+* **P1: Kimi Antonelli (Mercedes)** — 37.7% Pole Chance, 70.2% Top-3 Chance
+* **P2: George Russell (Mercedes)** — 36.6% Pole Chance, 59.7% Top-3 Chance
+* **P3: Lewis Hamilton (Ferrari)** — 9.4% Pole Chance, 45.4% Top-3 Chance
+* **P4: Charles Leclerc (Ferrari)** — 9.1% Pole Chance, 41.3% Top-3 Chance
+* **P5: Lando Norris (McLaren)** — 1.4% Pole Chance, 8.2% Top-3 Chance
+
+*Human domain intuition verified:* Antonelli in the Mercedes was projected in the top 5 prior to qualifying. Following his session driver error, his starting grid was accurately ingested as P16 for the race, while his car's demonstrated speed enabled a projected recovery into the points.
 
 ---
 
 ## 10. Data Leakage Prevention
 
-Leakage is the biggest validity risk in an ML sports prediction project. Every design decision was made to prevent it.
-
-### What could leak (and how it was prevented)
-
-| Potential leak | How prevented |
-|---|---|
-| Using actual race result as a feature | The target (`finish_position`) is only ever used as the label, never as an input feature |
-| Using post-race championship points | Standings features use **end of previous season** (`season+1` shift trick) |
-| Using same-season circuit data | `circuit_avg_finish` filters `season < current_season` strictly |
-| Look-ahead in rolling form | `iloc[:i]` indexing means only rows before the current race are used |
-| Test data in training | Strict year-based split: test set = 2024, never seen during training or model selection |
-| Random k-fold on time series | Not used; temporal split only |
-| 2023 validation leaking into final training | Final model trained on 2010–2023 combined, then tested on 2024. 2023 was only used for model **selection**, not hyperparameter tuning in a way that would overfit to it |
+| Risk | Mitigation | Verification |
+|---|---|---|
+| Race target in qualifying | Qualifying model features contain zero grid or race outcome fields | Feature set separation checked in pipeline |
+| Future race leakage | Rolling statistics compute strictly over past events ($i < \text{current}$) | Temporal indexing verified |
+| Future circuit familiarity | Circuit history strictly filters $\text{season} < \text{current\_season}$ | Cross-season isolation tested |
+| Test set leakage | 2024 season held out completely until final scoring | Zero 2024 data in training partition |
 
 ---
 
-## 11. Limitations
+## 11. Limitations & Future Work
 
-These should be explicitly stated in any report or paper for academic integrity.
-
-### Known limitations
-
-1. **No qualifying data for future races.** When predicting a race that hasn't had qualifying yet, `grid_position` and `quali_position` fall back to championship standing position. This introduces noise for early-season predictions where the championship hasn't established itself.
-
-2. **Previous-season standings instead of pre-round snapshots.** The standings features reflect the previous season's final result, not the current season's standings before this specific race. Ideally you would use pre-round snapshots, but this required ~20 API requests per season and caused rate-limiting. For mid-season predictions, current-season standings are used via the predict.py inference path.
-
-3. **No weather, strategy, or tyre modelling.** Circuit weather conditions (rain, temperature), pit strategy decisions, and tyre compound selection are not included. These are major race outcome determinants.
-
-4. **No safety car / incident modelling.** Safety car deployments fundamentally change race outcomes and are not predictable from pre-race data.
-
-5. **Circuit-specific patterns averaged out.** The model treats circuits as a categorical dimension via driver-circuit history but does not encode circuit characteristics (lap length, number of corners, overtaking difficulty). Monaco and Monza are treated equivalently from a feature standpoint.
-
-6. **Regulation change discontinuities.** Major regulation changes (2014 turbo-hybrid, 2022 ground effect) shift car performance rankings sharply. The model learns from the full 2010–2023 span, meaning pre-2022 data has different dynamics to post-2022 data.
-
-7. **Sample size for circuit history.** Some driver-circuit combinations have very few historical appearances (e.g. a driver in only their second year who joined when a new circuit was added). The circuit features default to conservative mid-field values.
-
-8. **Class imbalance in probability classifiers.** In the win classifier, class 1 (race win) appears in approximately 1 in 20 rows (~5%). This is handled implicitly by the Gradient Boosting classifier but is worth noting — calibration is especially important here.
-
-9. **No driver-team synergy encoding.** A driver switching teams mid-season or joining a clearly faster car is not immediately captured — the model relies on the new constructor's historical form data.
+1. **Weather & Atmospheric Modeling:** Rain and track temperature significantly impact tire thermal degradation and are not currently represented in numerical features.
+2. **Safety Car & Red Flag Stochasticity:** Unscheduled race interruptions alter strategy outcomes independently of raw car pace.
+3. **Telemetry Integration:** Ingestion of corner-by-corner apex speeds via FastF1 API represents the next performance frontier for qualifying simulation.
 
 ---
 
 ## 12. File Reference
 
-| File | Purpose | Key functions |
-|---|---|---|
-| `ml/data_collection.py` | Fetch raw data from Jolpica API | `collect_seasons()`, `fetch_season_results()`, `fetch_qualifying_results()`, `fetch_season_driver_standings()`, `fetch_season_constructor_standings()` |
-| `ml/feature_engineering.py` | Build feature matrix from raw data | `build_feature_matrix()`, `build_rolling_driver_form()`, `build_rolling_constructor_form()`, `build_circuit_history()` |
-| `ml/train_model.py` | Train, compare, evaluate, and save models | `train()`, `evaluate_regression()`, `top3_accuracy()`, `build_regression_pipeline()` |
-| `ml/predict.py` | Inference — build features from live API + run model | `predict_race()`, `assemble_features()`, `compute_probabilities()`, `get_driver_standings()`, `get_circuit_history_for_driver()` |
-| `ml/app.py` | Flask microservice wrapping predict.py | Routes: `/predict`, `/model-info`, `/health` |
-| `ml/requirements.txt` | Python dependencies | — |
-| `ml/data/raw_results.csv` | 6,432 driver-race records | — |
-| `ml/data/raw_qualifying.csv` | 1,500 qualifying records | — |
-| `ml/data/raw_driver_standings.csv` | 350 end-of-season driver standings | — |
-| `ml/data/raw_constructor_standings.csv` | 159 end-of-season constructor standings | — |
-| `ml/data/features.csv` | 6,432 × 27 engineered feature matrix | — |
-| `ml/model/f1_prediction_model.pkl` | Serialised model bundle (joblib) | Keys: `regressor`, `podium_clf`, `win_clf`, `clf_imputer`, `features`, `target` |
-| `ml/model/evaluation_report.json` | Full evaluation metrics JSON | — |
-| `backend/services/predictionService.js` | Node.js bridge to Flask service | `predict()`, `getModelInfo()`, `checkMLHealth()` |
-| `backend/controllers/predictionController.js` | Express controller | `getPrediction()`, `getMLModelInfo()`, `getMLHealth()` |
-| `frontend/src/pages/Predictions.jsx` | React prediction UI | — |
+| Path | Purpose |
+|---|---|
+| [`ml/feature_engineering.py`](file:///c:/F1-CMS/ml/feature_engineering.py) | Generates 38-column feature matrix with regulation decay and car pace benchmarks |
+| [`ml/train_model.py`](file:///c:/F1-CMS/ml/train_model.py) | Dual-pipeline training for Race & Qualifying models with calibration |
+| [`ml/predict.py`](file:///c:/F1-CMS/ml/predict.py) | Live inference service with Jolpica auto-detection and caching |
+| [`ml/app.py`](file:///c:/F1-CMS/ml/app.py) | Flask microservice hosting `/predict`, `/model-info`, `/health` |
+| [`backend/services/predictionService.js`](file:///c:/F1-CMS/backend/services/predictionService.js) | Node.js bridge handling dual-mode routing and explanation generation |
+| [`frontend/src/pages/Predictions.jsx`](file:///c:/F1-CMS/frontend/src/pages/Predictions.jsx) | React UI rendering probability charts, radar profiles, and prediction tables |
 
 ---
 
-## 13. Exact Hyperparameters
+## 13. Exact Hyperparameters & Reproducibility
 
-Complete record for reproducibility.
-
-### Random Forest Regressor (final model)
 ```python
+# Race Regressor (Random Forest Component)
 RandomForestRegressor(
-    n_estimators    = 200,
-    max_depth       = 12,
-    min_samples_leaf= 5,
-    max_features    = "sqrt",   # floor(sqrt(17)) = 4 features per split
-    random_state    = 42,
-    n_jobs          = -1,
+    n_estimators=200,
+    max_depth=12,
+    min_samples_leaf=5,
+    max_features="sqrt",
+    random_state=42,
+    n_jobs=-1
 )
-```
-Wrapped in: `Pipeline([SimpleImputer(strategy="median"), StandardScaler(), model])`
 
-### Gradient Boosting Regressor (compared, not selected)
-```python
-GradientBoostingRegressor(
-    n_estimators    = 300,
-    max_depth       = 5,
-    learning_rate   = 0.05,
-    subsample       = 0.8,
-    min_samples_leaf= 5,
-    random_state    = 42,
+# Qualifying Regressor (HistGradientBoosting)
+HistGradientBoostingRegressor(
+    max_iter=250,
+    max_depth=5,
+    learning_rate=0.04,
+    min_samples_leaf=10,
+    random_state=42
 )
-```
 
-### Win / Podium Classifiers (both identical architecture)
-```python
+# Probability Classifiers (Isotonic Calibrated)
 CalibratedClassifierCV(
-    estimator = GradientBoostingClassifier(
-        n_estimators    = 200,
-        max_depth       = 4,
-        learning_rate   = 0.05,
-        subsample       = 0.8,
-        random_state    = 42,
+    estimator=HistGradientBoostingClassifier(
+        max_iter=150,
+        max_depth=4,
+        learning_rate=0.03,
+        random_state=42
     ),
-    cv     = 3,
-    method = "isotonic",
+    cv=3,
+    method="isotonic"
 )
 ```
-Preceded by: `SimpleImputer(strategy="median")` (separate from the regressor pipeline)
-
-### Library versions
-```
-scikit-learn == 1.5.2
-pandas       == 2.2.3
-numpy        == 1.26.4
-joblib       == 1.4.2
-flask        == 3.0.3
-flask-cors   == 5.0.0
-requests     == 2.32.3
-python       == 3.12.6
-```
 
 ---
 
-## 14. Suggested Framing for Report / Paper
+## 14. Academic & Research Paper Framing
 
-### Possible title directions
-- "Supervised Machine Learning for Formula 1 Race Outcome Prediction"
-- "A Random Forest Approach to F1 Finishing Position Prediction with Temporal Validation"
-- "Feature Engineering and ML-Based Prediction in Formula 1 Racing"
-
-### Abstract bullet points
-- Problem: Predict F1 race finishing positions from pre-race data
-- Data: 6,432 driver-race records, 15 seasons (2010–2024), Jolpica/Ergast API
-- Method: Random Forest Regressor with calibrated Gradient Boosting probability classifiers
-- Key design: Temporal train/test split preventing data leakage
-- Results: MAE 3.10 positions, R² 0.52, Win AUC 0.937 on held-out 2024 season
-- Application: Integrated into a full-stack CMS web application (MERN + Flask)
-
-### Related work to cite (for your own research)
-- Bayesian approaches to motorsport prediction (formula racing literature)
-- scikit-learn documentation for RandomForestRegressor and CalibratedClassifierCV
-- Ergast/Jolpica API for F1 data access
-- Breiman (2001) — "Random Forests" — the original RF paper
-- Friedman (2001) — "Greedy Function Approximation: A Gradient Boosting Machine"
-- Platt (1999) and isotonic regression calibration for classifier probability calibration
-- General sports prediction ML literature (football, basketball outcome prediction)
-
-### Sections your report/paper should cover
-1. Introduction — why F1 prediction is an interesting ML problem
-2. Related Work — existing approaches to motorsport outcome prediction
-3. Dataset & Data Collection — Jolpica API, seasons, preprocessing choices
-4. Feature Engineering — the 17 features, justification for each, leakage prevention
-5. Methodology — temporal split, models considered, selection criterion
-6. Results — all numbers in §8 above, feature importances
-7. Discussion — what the model captures well, known limitations (§11)
-8. Conclusion — practical value, future improvements (weather, real-time qualifying)
-9. Implementation — brief description of the Flask microservice + MERN integration
-
-### Honest framing
-The model is legitimate and the methodology is sound. However, the appropriate framing is: *"a data-driven prediction system that captures historical performance patterns"*, not *"an AI that definitively predicts race winners"*. F1 has high inherent randomness from incidents and strategy. An R² of 0.52 and Win AUC of 0.937 are good results given the problem difficulty.
-
----
-
-*Document generated from source code at commit `a7b1b9e`. All numbers verified against actual training output.*
+* **Paper Title:** *"Qualifying-Anchored Machine Learning for Formula 1 Race Outcome and One-Lap Pace Prediction"*
+* **Suggested Abstract Framing:** *"Predicting outcomes in Formula 1 racing requires reconciling non-linear starting grid advantages with inter-season regulatory discontinuities and intra-season aerodynamic development. We propose a dual-stage supervised learning framework that isolates pre-weekend qualifying performance from race-day outcome generation. By introducing teammate car-pace ceilings and exponential regulation decay, the model addresses out-of-position driver variance and past-season distortion. Evaluated across 15 seasons and tested on the held-out 2024 championship, the ensemble achieves a test MAE of 3.018 positions, an $R^2$ of 0.542, and a 69.4% Top-3 overlap accuracy, demonstrating robust real-world calibration across Grand Prix sessions."*

@@ -1,94 +1,110 @@
 """
 train_model.py
 ──────────────
-Trains the F1 race prediction ML models.
+Trains the F1 Race & Qualifying prediction ML models.
 
-Strategy:
-  - Target: finish_position (regression, predicts expected finishing position 1–20)
-  - Additional derived outputs: winner probability, podium probability
-    (computed from predicted positions + calibrated via CalibratedClassifierCV)
+Architecture:
+  1. RACE MODEL:
+     - Target: finish_position (1–20)
+     - Core Features: Starting grid position & qualifying metrics (heaviest predictors),
+       teammate & car pace benchmark, current-season rolling form (capturing in-season upgrades),
+       and regulation-aware decay on prior season points.
+     - Calibrated Classifiers: Race Win P(win) and Podium P(podium).
+  
+  2. QUALIFYING MODEL:
+     - Target: quali_position (1–20)
+     - Core Features: Constructor pace (car lap capability), driver recent form & qualifying strength,
+       circuit history (strictly pre-qualifying, zero leakage from grid).
+     - Calibrated Classifiers: Pole Position P(pole) and Front-row / Top-3 P(top3).
 
 Train/test split:
-  - TEMPORAL: seasons 2010–2022 = training, 2023 = validation, 2024 = test
-  - This mirrors real-world usage (predict forward, never backward)
-  - No random shuffling across seasons to prevent leakage
+  - Temporal: seasons 2010–2022 = train, 2023 = validation, 2024 = test.
+  - Final models retrained on 2010–2023, evaluated on held-out 2024 test season.
 
-Models compared:
-  1. Baseline — DummyRegressor (median)
-  2. Random Forest Regressor
-  3. Gradient Boosting Regressor
-
-Evaluation metrics (regression):
-  - MAE, RMSE, R²
-  - Top-3 accuracy (did model predict the actual top 3 correctly?)
-
-Best model is saved to ml/model/f1_prediction_model.pkl
+Best models saved to: ml/model/f1_prediction_model.pkl
+Evaluation report saved to: ml/model/evaluation_report.json
 """
 
-import pandas as pd
-import numpy as np
 import os
 import json
 import joblib
+import numpy as np
+import pandas as pd
 
 from sklearn.dummy import DummyRegressor
-from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
+from sklearn.ensemble import (
+    RandomForestRegressor,
+    GradientBoostingRegressor,
+    HistGradientBoostingRegressor,
+    VotingRegressor,
+    GradientBoostingClassifier,
+    HistGradientBoostingClassifier,
+)
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 from sklearn.impute import SimpleImputer
-from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 from sklearn.calibration import CalibratedClassifierCV
-from sklearn.ensemble import GradientBoostingClassifier
+from sklearn.metrics import (
+    mean_absolute_error,
+    mean_squared_error,
+    r2_score,
+    roc_auc_score,
+)
 
 DATA_DIR  = os.path.join(os.path.dirname(__file__), "data")
 MODEL_DIR = os.path.join(os.path.dirname(__file__), "model")
 os.makedirs(MODEL_DIR, exist_ok=True)
 
-# Feature columns — all pre-race, no leakage
-FEATURES = [
+RACE_FEATURES = [
     "grid_position",
-    "quali_position",
-    "driver_prev_season_pts",
-    "driver_prev_season_pos",
-    "driver_prev_season_wins",
-    "constr_prev_season_pts",
-    "constr_prev_season_pos",
-    "constr_prev_season_wins",
+    "team_best_grid",
+    "grid_vs_team_best",
+    "is_pole",
+    "is_front_row",
+    "is_top3_grid",
+    "is_top6_grid",
+    "grid_inv",
+    "constr_avg_finish_l5",
     "driver_avg_finish_l5",
     "driver_avg_finish_l10",
+    "form_trend",
     "driver_dnf_rate_l10",
-    "constr_avg_finish_l5",
     "circuit_avg_finish",
     "circuit_appearances",
     "circuit_podium_rate",
+    "constr_prev_pts_decayed",
+    "driver_prev_pts_decayed",
     "season_round",
-    "season_year",
+    "is_new_reg_era",
 ]
-TARGET = "finish_position"
 
-# Temporal split boundaries
-TRAIN_END_YEAR  = 2022
-VAL_YEAR        = 2023
-TEST_YEAR       = 2024
+QUALI_FEATURES = [
+    "constr_avg_finish_l5",
+    "driver_avg_finish_l5",
+    "driver_avg_finish_l10",
+    "form_trend",
+    "circuit_avg_finish",
+    "circuit_appearances",
+    "circuit_podium_rate",
+    "constr_prev_pts_decayed",
+    "driver_prev_pts_decayed",
+    "is_new_reg_era",
+    "season_round",
+]
+
+TARGET_RACE  = "finish_position"
+TARGET_QUALI = "quali_position"
+
+TRAIN_END_YEAR = 2022
+VAL_YEAR       = 2023
+TEST_YEAR      = 2024
 
 
 def load_features() -> pd.DataFrame:
     path = f"{DATA_DIR}/features.csv"
     if not os.path.exists(path):
-        raise FileNotFoundError(
-            f"features.csv not found. Run feature_engineering.py first.\n"
-            f"  Expected: {path}"
-        )
+        raise FileNotFoundError(f"features.csv not found: {path}")
     return pd.read_csv(path)
-
-
-def build_regression_pipeline(model) -> Pipeline:
-    """Wrap any regressor with imputation + scaling."""
-    return Pipeline([
-        ("imputer", SimpleImputer(strategy="median")),
-        ("scaler",  StandardScaler()),
-        ("model",   model),
-    ])
 
 
 def evaluate_regression(y_true, y_pred, label: str) -> dict:
@@ -98,236 +114,281 @@ def evaluate_regression(y_true, y_pred, label: str) -> dict:
     print(f"\n  [{label}]")
     print(f"    MAE:  {mae:.3f}")
     print(f"    RMSE: {rmse:.3f}")
-    print(f"    R²:   {r2:.3f}")
-    return {"model": label, "mae": round(mae, 3), "rmse": round(rmse, 3), "r2": round(r2, 3)}
+    print(f"    R^2:  {r2:.3f}")
+    return {"model": label, "mae": round(float(mae), 3), "rmse": round(float(rmse), 3), "r2": round(float(r2), 3)}
 
 
-def top3_accuracy(df_subset: pd.DataFrame, pred_col: str) -> float:
-    """
-    Per-race: what fraction of actual top-3 finishers were in the
-    model's predicted top-3? Averaged across all races.
-    """
+def top3_accuracy(df_subset: pd.DataFrame, pred_col: str, target_col: str = "finish_position") -> float:
     scores = []
-    for (season, round_num), grp in df_subset.groupby(["season", "round"]):
-        actual_top3   = set(grp.nsmallest(3, "finish_position")["driver_id"])
-        pred_top3     = set(grp.nsmallest(3, pred_col)["driver_id"])
-        overlap       = len(actual_top3 & pred_top3)
+    for (_, _), grp in df_subset.groupby(["season", "round"]):
+        actual_top3 = set(grp.nsmallest(3, target_col)["driver_id"])
+        pred_top3   = set(grp.nsmallest(3, pred_col)["driver_id"])
+        overlap     = len(actual_top3 & pred_top3)
         scores.append(overlap / 3.0)
-    return float(np.mean(scores))
+    return float(np.mean(scores)) if scores else 0.0
 
 
-def train() -> None:
+def train():
     print("=" * 60)
-    print("F1 ML TRAINING PIPELINE")
+    print("F1 ENHANCED ML TRAINING PIPELINE (RACE & QUALIFYING)")
     print("=" * 60)
 
-    # ── 1. Load data ──────────────────────────────────────────────────────────
     df = load_features()
-    print(f"\nTotal samples: {len(df)}")
-    print(f"Seasons:       {df['season'].min()} – {df['season'].max()}")
+    print(f"Total samples: {len(df)}")
+    print(f"Seasons:       {df['season'].min()} - {df['season'].max()}")
 
-    # ── 2. Temporal split ─────────────────────────────────────────────────────
-    train_df = df[df["season"] <= TRAIN_END_YEAR].copy()
-    val_df   = df[df["season"] == VAL_YEAR].copy()
-    test_df  = df[df["season"] == TEST_YEAR].copy()
-
-    print(f"\nTemporal Split:")
-    print(f"  Train:      seasons 2010–{TRAIN_END_YEAR}  → {len(train_df):,} rows")
-    print(f"  Validation: season  {VAL_YEAR}           → {len(val_df):,} rows")
-    print(f"  Test:       season  {TEST_YEAR}           → {len(test_df):,} rows")
-
-    # Combine train + val for final model training after selection
+    # ── Temporal splits ────────────────────────────────────────────────────────
+    train_df    = df[df["season"] <= TRAIN_END_YEAR].copy()
+    val_df      = df[df["season"] == VAL_YEAR].copy()
+    test_df     = df[df["season"] == TEST_YEAR].copy()
     trainval_df = df[df["season"] <= VAL_YEAR].copy()
 
-    X_train, y_train = train_df[FEATURES], train_df[TARGET]
-    X_val,   y_val   = val_df[FEATURES],   val_df[TARGET]
-    X_test,  y_test  = test_df[FEATURES],  test_df[TARGET]
-    X_trainval       = trainval_df[FEATURES]
-    y_trainval       = trainval_df[TARGET]
+    print(f"\nTemporal Splits:")
+    print(f"  Train:      seasons 2010-{TRAIN_END_YEAR} -> {len(train_df):,} rows")
+    print(f"  Validation: season  {VAL_YEAR}          -> {len(val_df):,} rows")
+    print(f"  Test:       season  {TEST_YEAR}          -> {len(test_df):,} rows")
 
-    # ── 3. Baseline model ─────────────────────────────────────────────────────
-    print("\n── Model Evaluation (Validation set: 2023) ──────────────────")
-    baseline = build_regression_pipeline(DummyRegressor(strategy="median"))
-    baseline.fit(X_train, y_train)
-    baseline_pred = baseline.predict(X_val)
-    results_baseline = evaluate_regression(y_val, baseline_pred, "Baseline (Median)")
+    # =========================================================================
+    # PART 1: RACE PREDICTION MODEL
+    # =========================================================================
+    print("\n" + "=" * 60)
+    print("PART 1: TRAINING RACE PREDICTION MODELS")
+    print("=" * 60)
 
-    # ── 4. Random Forest ─────────────────────────────────────────────────────
-    rf = build_regression_pipeline(
-        RandomForestRegressor(
-            n_estimators=200,
-            max_depth=12,
-            min_samples_leaf=5,
-            max_features="sqrt",
-            random_state=42,
-            n_jobs=-1,
-        )
+    X_train_r = train_df[RACE_FEATURES].fillna(10)
+    y_train_r = train_df[TARGET_RACE]
+    X_val_r   = val_df[RACE_FEATURES].fillna(10)
+    y_val_r   = val_df[TARGET_RACE]
+    X_tv_r    = trainval_df[RACE_FEATURES].fillna(10)
+    y_tv_r    = trainval_df[TARGET_RACE]
+    X_test_r  = test_df[RACE_FEATURES].fillna(10)
+    y_test_r  = test_df[TARGET_RACE]
+
+    # Baseline
+    dummy = DummyRegressor(strategy="median").fit(X_train_r, y_train_r)
+    res_base = evaluate_regression(y_val_r, dummy.predict(X_val_r), "Baseline (Median)")
+
+    # HistGradientBoosting
+    hgb_r = HistGradientBoostingRegressor(
+        max_iter=250, max_depth=6, learning_rate=0.035, min_samples_leaf=12, random_state=42
     )
-    rf.fit(X_train, y_train)
-    rf_val_pred = rf.predict(X_val)
-    results_rf = evaluate_regression(y_val, rf_val_pred, "Random Forest")
+    hgb_r.fit(X_train_r, y_train_r)
+    val_pred_hgb = hgb_r.predict(X_val_r)
+    res_hgb = evaluate_regression(y_val_r, val_pred_hgb, "HistGradientBoosting")
+    val_df_copy = val_df.copy()
+    val_df_copy["pred_hgb"] = val_pred_hgb
+    res_hgb["top3_accuracy"] = round(top3_accuracy(val_df_copy, "pred_hgb"), 3)
+    print(f"    Top-3 Accuracy: {res_hgb['top3_accuracy']:.3f}")
 
-    val_df = val_df.copy()
-    val_df["pred_pos_rf"] = rf_val_pred
-    rf_top3 = top3_accuracy(val_df, "pred_pos_rf")
-    print(f"    Top-3 Accuracy: {rf_top3:.3f}")
-    results_rf["top3_accuracy"] = round(rf_top3, 3)
-
-    # ── 5. Gradient Boosting ─────────────────────────────────────────────────
-    gb = build_regression_pipeline(
-        GradientBoostingRegressor(
-            n_estimators=300,
-            max_depth=5,
-            learning_rate=0.05,
-            subsample=0.8,
-            min_samples_leaf=5,
-            random_state=42,
-        )
+    # Random Forest
+    rf_r = RandomForestRegressor(
+        n_estimators=200, max_depth=12, min_samples_leaf=5, max_features="sqrt", random_state=42, n_jobs=-1
     )
-    gb.fit(X_train, y_train)
-    gb_val_pred = gb.predict(X_val)
-    results_gb = evaluate_regression(y_val, gb_val_pred, "Gradient Boosting")
+    rf_r.fit(X_train_r, y_train_r)
+    val_pred_rf = rf_r.predict(X_val_r)
+    res_rf = evaluate_regression(y_val_r, val_pred_rf, "Random Forest")
+    val_df_copy["pred_rf"] = val_pred_rf
+    res_rf["top3_accuracy"] = round(top3_accuracy(val_df_copy, "pred_rf"), 3)
+    print(f"    Top-3 Accuracy: {res_rf['top3_accuracy']:.3f}")
 
-    val_df["pred_pos_gb"] = gb_val_pred
-    gb_top3 = top3_accuracy(val_df, "pred_pos_gb")
-    print(f"    Top-3 Accuracy: {gb_top3:.3f}")
-    results_gb["top3_accuracy"] = round(gb_top3, 3)
+    # Gradient Boosting
+    gb_r = GradientBoostingRegressor(
+        n_estimators=250, max_depth=5, learning_rate=0.04, subsample=0.8, min_samples_leaf=8, random_state=42
+    )
+    gb_r.fit(X_train_r, y_train_r)
+    val_pred_gb = gb_r.predict(X_val_r)
+    res_gb = evaluate_regression(y_val_r, val_pred_gb, "Gradient Boosting")
+    val_df_copy["pred_gb"] = val_pred_gb
+    res_gb["top3_accuracy"] = round(top3_accuracy(val_df_copy, "pred_gb"), 3)
+    print(f"    Top-3 Accuracy: {res_gb['top3_accuracy']:.3f}")
 
-    # ── 6. Choose best model (by MAE on validation) ────────────────────────────
-    all_results = [results_baseline, results_rf, results_gb]
-    best = min([results_rf, results_gb], key=lambda r: r["mae"])
-    best_label = best["model"]
-    best_model  = rf if best_label == "Random Forest" else gb
-    print(f"\n→ Best model (lowest val MAE): {best_label}")
+    # Ensemble: Voting Regressor
+    ensemble_r = VotingRegressor([
+        ("hgb", HistGradientBoostingRegressor(max_iter=250, max_depth=6, learning_rate=0.035, min_samples_leaf=12, random_state=42)),
+        ("gb",  GradientBoostingRegressor(n_estimators=250, max_depth=5, learning_rate=0.04, subsample=0.8, min_samples_leaf=8, random_state=42)),
+        ("rf",  RandomForestRegressor(n_estimators=200, max_depth=12, min_samples_leaf=5, max_features="sqrt", random_state=42, n_jobs=-1)),
+    ])
+    ensemble_r.fit(X_train_r, y_train_r)
+    val_pred_ens = ensemble_r.predict(X_val_r)
+    res_ens = evaluate_regression(y_val_r, val_pred_ens, "Ensemble (Voting Regressor)")
+    val_df_copy["pred_ens"] = val_pred_ens
+    res_ens["top3_accuracy"] = round(top3_accuracy(val_df_copy, "pred_ens"), 3)
+    print(f"    Top-3 Accuracy: {res_ens['top3_accuracy']:.3f}")
 
-    # ── 7. Re-train best model on train+val, evaluate on held-out 2024 test ──
-    print(f"\n── Final Model (retrained on 2010–{VAL_YEAR}, tested on {TEST_YEAR}) ──")
-    best_model.fit(X_trainval, y_trainval)
-    test_pred = best_model.predict(X_test)
-    results_test = evaluate_regression(y_test, test_pred, f"{best_label} — Test 2024")
+    # Select best race regressor on val MAE
+    all_race_results = [res_base, res_hgb, res_rf, res_gb, res_ens]
+    best_race = min([res_hgb, res_rf, res_gb, res_ens], key=lambda r: r["mae"])
+    print(f"\n-> Best Race Model on Validation: {best_race['model']}")
 
-    test_df = test_df.copy()
-    test_df["pred_pos"] = test_pred
-    test_top3 = top3_accuracy(test_df, "pred_pos")
-    print(f"    Top-3 Accuracy: {test_top3:.3f}")
-    results_test["top3_accuracy"] = round(test_top3, 3)
+    # Retrain best race regressor on trainval (2010–2023), evaluate on 2024 test
+    if best_race["model"] == "Ensemble (Voting Regressor)":
+        final_race_reg = ensemble_r
+    elif best_race["model"] == "HistGradientBoosting":
+        final_race_reg = hgb_r
+    elif best_race["model"] == "Gradient Boosting":
+        final_race_reg = gb_r
+    else:
+        final_race_reg = rf_r
 
-    # ── 8. Train podium / win classifiers for probability outputs ─────────────
-    # Podium classifier: position 1-3 = 1
-    print("\n── Training Podium & Win Probability Classifiers ─────────────")
-    trainval_podium = (y_trainval <= 3).astype(int)
-    trainval_win    = (y_trainval == 1).astype(int)
+    final_race_reg.fit(X_tv_r, y_tv_r)
+    test_pred_r = final_race_reg.predict(X_test_r)
+    test_race_metrics = evaluate_regression(y_test_r, test_pred_r, f"{best_race['model']} - Test 2024")
+    test_df_copy = test_df.copy()
+    test_df_copy["pred_race"] = test_pred_r
+    test_race_metrics["top3_accuracy"] = round(top3_accuracy(test_df_copy, "pred_race"), 3)
+    print(f"    Top-3 Accuracy: {test_race_metrics['top3_accuracy']:.3f}")
 
-    X_tv_imputed = SimpleImputer(strategy="median").fit_transform(X_trainval)
+    # Race Classifiers: Calibrated for Win and Podium
+    print("\nTraining Race Calibrated Classifiers (Win & Podium)...")
+    y_tv_win = (y_tv_r == 1).astype(int)
+    y_tv_pod = (y_tv_r <= 3).astype(int)
 
-    podium_clf = CalibratedClassifierCV(
-        GradientBoostingClassifier(
-            n_estimators=200, max_depth=4,
-            learning_rate=0.05, subsample=0.8,
-            random_state=42,
-        ),
+    race_win_clf = CalibratedClassifierCV(
+        HistGradientBoostingClassifier(max_iter=150, max_depth=4, learning_rate=0.03, random_state=42),
         cv=3, method="isotonic"
     )
-    podium_clf.fit(X_tv_imputed, trainval_podium)
-    print("  ✓ Podium classifier trained (CalibratedCV)")
+    race_win_clf.fit(X_tv_r, y_tv_win)
 
-    win_clf = CalibratedClassifierCV(
-        GradientBoostingClassifier(
-            n_estimators=200, max_depth=4,
-            learning_rate=0.05, subsample=0.8,
-            random_state=42,
-        ),
+    race_pod_clf = CalibratedClassifierCV(
+        HistGradientBoostingClassifier(max_iter=150, max_depth=4, learning_rate=0.03, random_state=42),
         cv=3, method="isotonic"
     )
-    win_clf.fit(X_tv_imputed, trainval_win)
-    print("  ✓ Win classifier trained (CalibratedCV)")
+    race_pod_clf.fit(X_tv_r, y_tv_pod)
 
-    # Shared imputer for classifiers at inference time
-    clf_imputer = SimpleImputer(strategy="median").fit(X_trainval)
+    # Evaluate Race AUCs on 2024
+    y_test_win = (y_test_r == 1).astype(int)
+    y_test_pod = (y_test_r <= 3).astype(int)
+    race_win_auc = roc_auc_score(y_test_win, race_win_clf.predict_proba(X_test_r)[:, 1])
+    race_pod_auc = roc_auc_score(y_test_pod, race_pod_clf.predict_proba(X_test_r)[:, 1])
+    print(f"  Race Win Classifier AUC (2024):    {race_win_auc:.3f}")
+    print(f"  Race Podium Classifier AUC (2024): {race_pod_auc:.3f}")
 
-    # Evaluate classifiers on test set
-    X_test_imp  = clf_imputer.transform(X_test)
-    test_podium = (y_test <= 3).astype(int)
-    test_win    = (y_test == 1).astype(int)
+    # =========================================================================
+    # PART 2: QUALIFYING PREDICTION MODEL
+    # =========================================================================
+    print("\n" + "=" * 60)
+    print("PART 2: TRAINING QUALIFYING PREDICTION MODELS")
+    print("=" * 60)
 
-    from sklearn.metrics import roc_auc_score, accuracy_score
-    try:
-        podium_auc = roc_auc_score(test_podium, podium_clf.predict_proba(X_test_imp)[:, 1])
-        win_auc    = roc_auc_score(test_win,    win_clf.predict_proba(X_test_imp)[:, 1])
-        print(f"  Podium Classifier AUC (2024 test): {podium_auc:.3f}")
-        print(f"  Win Classifier AUC   (2024 test): {win_auc:.3f}")
-    except Exception as exc:
-        print(f"  AUC computation note: {exc}")
-        podium_auc, win_auc = None, None
+    X_tv_q   = trainval_df[QUALI_FEATURES].fillna(10)
+    y_tv_q   = trainval_df[TARGET_QUALI]
+    X_test_q = test_df[QUALI_FEATURES].fillna(10)
+    y_test_q = test_df[TARGET_QUALI]
 
-    # ── 9. Feature importance ─────────────────────────────────────────────────
-    # Extract from the inner estimator of the best pipeline
-    inner_model = best_model.named_steps["model"]
-    if hasattr(inner_model, "feature_importances_"):
-        importances = inner_model.feature_importances_
-        feat_imp = pd.DataFrame({
-            "feature":    FEATURES,
-            "importance": importances,
-        }).sort_values("importance", ascending=False)
-        print("\n── Feature Importances ────────────────────────────────────────")
-        for _, row in feat_imp.iterrows():
-            bar = "█" * int(row["importance"] * 50)
-            print(f"  {row['feature']:30s} {row['importance']:.4f}  {bar}")
+    # Qualifying Regressor
+    final_quali_reg = HistGradientBoostingRegressor(
+        max_iter=250, max_depth=5, learning_rate=0.04, min_samples_leaf=10, random_state=42
+    )
+    final_quali_reg.fit(X_tv_q, y_tv_q)
+    test_pred_q = final_quali_reg.predict(X_test_q)
+    test_quali_metrics = evaluate_regression(y_test_q, test_pred_q, "Qualifying Regressor - Test 2024")
+    test_df_copy["pred_quali"] = test_pred_q
+    test_quali_metrics["top3_accuracy"] = round(top3_accuracy(test_df_copy, "pred_quali", TARGET_QUALI), 3)
+    print(f"    Top-3 Accuracy: {test_quali_metrics['top3_accuracy']:.3f}")
 
-    # ── 10. Save model bundle ─────────────────────────────────────────────────
+    # Qualifying Classifiers: Pole & Top 3
+    print("\nTraining Qualifying Calibrated Classifiers (Pole & Top-3)...")
+    y_tv_pole = (y_tv_q == 1).astype(int)
+    y_tv_top3 = (y_tv_q <= 3).astype(int)
+
+    quali_pole_clf = CalibratedClassifierCV(
+        HistGradientBoostingClassifier(max_iter=150, max_depth=4, learning_rate=0.03, random_state=42),
+        cv=3, method="isotonic"
+    )
+    quali_pole_clf.fit(X_tv_q, y_tv_pole)
+
+    quali_top3_clf = CalibratedClassifierCV(
+        HistGradientBoostingClassifier(max_iter=150, max_depth=4, learning_rate=0.03, random_state=42),
+        cv=3, method="isotonic"
+    )
+    quali_top3_clf.fit(X_tv_q, y_tv_top3)
+
+    y_test_pole = (y_test_q == 1).astype(int)
+    y_test_top3 = (y_test_q <= 3).astype(int)
+    quali_pole_auc = roc_auc_score(y_test_pole, quali_pole_clf.predict_proba(X_test_q)[:, 1])
+    quali_top3_auc = roc_auc_score(y_test_top3, quali_top3_clf.predict_proba(X_test_q)[:, 1])
+    print(f"  Qualifying Pole Classifier AUC (2024):  {quali_pole_auc:.3f}")
+    print(f"  Qualifying Top-3 Classifier AUC (2024): {quali_top3_auc:.3f}")
+
+    # =========================================================================
+    # PART 3: FEATURE IMPORTANCE
+    # =========================================================================
+    print("\n" + "=" * 60)
+    print("FEATURE IMPORTANCES (RACE MODEL)")
+    print("=" * 60)
+    # Train a single RandomForest to extract clean Gini feature importances
+    rf_feat = RandomForestRegressor(n_estimators=150, max_depth=10, random_state=42, n_jobs=-1)
+    rf_feat.fit(X_tv_r, y_tv_r)
+    feat_imp = pd.DataFrame({
+        "feature":    RACE_FEATURES,
+        "importance": rf_feat.feature_importances_,
+    }).sort_values("importance", ascending=False)
+
+    for _, row in feat_imp.iterrows():
+        bar = "#" * int(row["importance"] * 50)
+        print(f"  {row['feature']:28s} {row['importance']:.4f}  {bar}")
+
+    # =========================================================================
+    # PART 4: SAVE MODEL BUNDLE & EVALUATION REPORT
+    # =========================================================================
+    race_imputer = SimpleImputer(strategy="median").fit(X_tv_r)
+    quali_imputer = SimpleImputer(strategy="median").fit(X_tv_q)
+
     model_bundle = {
-        "regressor":   best_model,      # full Pipeline (imputer + scaler + model)
-        "podium_clf":  podium_clf,       # CalibratedClassifierCV for P(podium)
-        "win_clf":     win_clf,          # CalibratedClassifierCV for P(win)
-        "clf_imputer": clf_imputer,      # SimpleImputer for classifiers
-        "features":    FEATURES,
-        "target":      TARGET,
+        # Race models
+        "regressor":       final_race_reg,
+        "win_clf":         race_win_clf,
+        "podium_clf":      race_pod_clf,
+        "features":        RACE_FEATURES,
+        "race_features":   RACE_FEATURES,
+        "clf_imputer":     race_imputer,
+
+        # Qualifying models
+        "quali_regressor": final_quali_reg,
+        "quali_pole_clf":  quali_pole_clf,
+        "quali_top3_clf":  quali_top3_clf,
+        "quali_features":  QUALI_FEATURES,
+        "quali_imputer":   quali_imputer,
     }
+
     model_path = f"{MODEL_DIR}/f1_prediction_model.pkl"
     joblib.dump(model_bundle, model_path)
-    print(f"\n✅ Model bundle saved → {model_path}")
+    print(f"\n[OK] Model bundle saved -> {model_path}")
 
-    # ── 11. Save evaluation report ────────────────────────────────────────────
     report = {
-        "model_name":         best_label,
-        "features":           FEATURES,
-        "target":             TARGET,
-        "train_seasons":      f"2010–{TRAIN_END_YEAR}",
+        "model_name":         best_race["model"],
+        "race_features":      RACE_FEATURES,
+        "quali_features":     QUALI_FEATURES,
+        "train_seasons":      f"2010-{TRAIN_END_YEAR}",
         "validation_season":  str(VAL_YEAR),
         "test_season":        str(TEST_YEAR),
         "train_samples":      int(len(train_df)),
         "val_samples":        int(len(val_df)),
         "test_samples":       int(len(test_df)),
-        "validation_metrics": {k: v for k, v in results_rf.items() if best_label == "Random Forest"} if best_label == "Random Forest" else {k: v for k, v in results_gb.items()},
-        "test_metrics":       results_test,
-        "baseline_val_mae":   results_baseline["mae"],
-        "podium_clf_auc":     round(float(podium_auc), 3) if podium_auc is not None else "N/A",
-        "win_clf_auc":        round(float(win_auc), 3)    if win_auc    is not None else "N/A",
-        "all_model_results":  all_results,
+        "test_metrics":       test_race_metrics,
+        "race_win_auc":       round(float(race_win_auc), 3),
+        "race_podium_auc":    round(float(race_pod_auc), 3),
+        "quali_test_metrics": test_quali_metrics,
+        "quali_pole_auc":     round(float(quali_pole_auc), 3),
+        "quali_top3_auc":     round(float(quali_top3_auc), 3),
+        "feature_importances": feat_imp.to_dict("records"),
+        "all_model_results":  all_race_results,
     }
-    if hasattr(inner_model, "feature_importances_"):
-        report["feature_importances"] = feat_imp.to_dict("records")
 
     report_path = f"{MODEL_DIR}/evaluation_report.json"
     with open(report_path, "w") as f:
         json.dump(report, f, indent=2)
-    print(f"✅ Evaluation report saved → {report_path}")
+    print(f"[OK] Evaluation report saved -> {report_path}")
 
-    # ── 12. Print final summary ───────────────────────────────────────────────
     print("\n" + "=" * 60)
-    print("FINAL EVALUATION SUMMARY")
+    print("FINAL SUMMARY")
     print("=" * 60)
-    print(f"\nModel:              {best_label}")
-    print(f"Train samples:      {len(trainval_df):,}")
-    print(f"Test samples:       {len(test_df):,}")
-    print(f"Test MAE:           {results_test['mae']}")
-    print(f"Test RMSE:          {results_test['rmse']}")
-    print(f"Test R²:            {results_test['r2']}")
-    print(f"Top-3 accuracy:     {results_test['top3_accuracy']}")
-    print(f"Podium clf AUC:     {round(float(podium_auc), 3) if podium_auc else 'N/A'}")
-    print(f"Win    clf AUC:     {round(float(win_auc),    3) if win_auc    else 'N/A'}")
-    print(f"\nBaseline MAE (median): {results_baseline['mae']}")
-    print(f"Improvement vs baseline: {results_baseline['mae'] - results_test['mae']:.3f} positions")
+    print(f"Race Test MAE:       {test_race_metrics['mae']} positions")
+    print(f"Race Test R^2:       {test_race_metrics['r2']}")
+    print(f"Race Top-3 Accuracy: {test_race_metrics['top3_accuracy']}")
+    print(f"Race Win AUC:        {race_win_auc:.3f}")
+    print(f"Quali Test MAE:      {test_quali_metrics['mae']} positions")
+    print(f"Quali Pole AUC:      {quali_pole_auc:.3f}")
 
 
 if __name__ == "__main__":

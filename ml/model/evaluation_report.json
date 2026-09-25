@@ -1,48 +1,146 @@
 {
   "model_name": "Random Forest",
-  "features": [
+  "race_features": [
     "grid_position",
-    "quali_position",
-    "driver_prev_season_pts",
-    "driver_prev_season_pos",
-    "driver_prev_season_wins",
-    "constr_prev_season_pts",
-    "constr_prev_season_pos",
-    "constr_prev_season_wins",
+    "team_best_grid",
+    "grid_vs_team_best",
+    "is_pole",
+    "is_front_row",
+    "is_top3_grid",
+    "is_top6_grid",
+    "grid_inv",
+    "constr_avg_finish_l5",
     "driver_avg_finish_l5",
     "driver_avg_finish_l10",
+    "form_trend",
     "driver_dnf_rate_l10",
-    "constr_avg_finish_l5",
     "circuit_avg_finish",
     "circuit_appearances",
     "circuit_podium_rate",
+    "constr_prev_pts_decayed",
+    "driver_prev_pts_decayed",
     "season_round",
-    "season_year"
+    "is_new_reg_era"
   ],
-  "target": "finish_position",
-  "train_seasons": "2010\u20132022",
+  "quali_features": [
+    "constr_avg_finish_l5",
+    "driver_avg_finish_l5",
+    "driver_avg_finish_l10",
+    "form_trend",
+    "circuit_avg_finish",
+    "circuit_appearances",
+    "circuit_podium_rate",
+    "constr_prev_pts_decayed",
+    "driver_prev_pts_decayed",
+    "is_new_reg_era",
+    "season_round"
+  ],
+  "train_seasons": "2010-2022",
   "validation_season": "2023",
   "test_season": "2024",
   "train_samples": 5513,
   "val_samples": 440,
   "test_samples": 479,
-  "validation_metrics": {
-    "model": "Random Forest",
-    "mae": 3.429,
-    "rmse": 4.362,
-    "r2": 0.428,
-    "top3_accuracy": 0.591
-  },
   "test_metrics": {
-    "model": "Random Forest \u2014 Test 2024",
-    "mae": 3.104,
-    "rmse": 3.976,
-    "r2": 0.523,
-    "top3_accuracy": 0.556
+    "model": "Random Forest - Test 2024",
+    "mae": 3.018,
+    "rmse": 3.894,
+    "r2": 0.542,
+    "top3_accuracy": 0.694
   },
-  "baseline_val_mae": 5.0,
-  "podium_clf_auc": 0.932,
-  "win_clf_auc": 0.937,
+  "race_win_auc": 0.938,
+  "race_podium_auc": 0.94,
+  "quali_test_metrics": {
+    "model": "Qualifying Regressor - Test 2024",
+    "mae": 3.324,
+    "rmse": 4.328,
+    "r2": 0.435,
+    "top3_accuracy": 0.486
+  },
+  "quali_pole_auc": 0.901,
+  "quali_top3_auc": 0.873,
+  "feature_importances": [
+    {
+      "feature": "driver_avg_finish_l10",
+      "importance": 0.2545220615410353
+    },
+    {
+      "feature": "constr_avg_finish_l5",
+      "importance": 0.1966987585378893
+    },
+    {
+      "feature": "grid_position",
+      "importance": 0.1319986229775561
+    },
+    {
+      "feature": "grid_inv",
+      "importance": 0.10487913567471642
+    },
+    {
+      "feature": "team_best_grid",
+      "importance": 0.04879528684240038
+    },
+    {
+      "feature": "form_trend",
+      "importance": 0.039846157072470245
+    },
+    {
+      "feature": "constr_prev_pts_decayed",
+      "importance": 0.035794452407805794
+    },
+    {
+      "feature": "driver_avg_finish_l5",
+      "importance": 0.03200383056592341
+    },
+    {
+      "feature": "circuit_avg_finish",
+      "importance": 0.03184976864387411
+    },
+    {
+      "feature": "driver_prev_pts_decayed",
+      "importance": 0.031711459954422774
+    },
+    {
+      "feature": "season_round",
+      "importance": 0.028040990261096223
+    },
+    {
+      "feature": "circuit_appearances",
+      "importance": 0.01565340093020644
+    },
+    {
+      "feature": "driver_dnf_rate_l10",
+      "importance": 0.013412781497391167
+    },
+    {
+      "feature": "grid_vs_team_best",
+      "importance": 0.013031801609952737
+    },
+    {
+      "feature": "circuit_podium_rate",
+      "importance": 0.008998517989289072
+    },
+    {
+      "feature": "is_top6_grid",
+      "importance": 0.0042212776501304805
+    },
+    {
+      "feature": "is_new_reg_era",
+      "importance": 0.0028746539359215386
+    },
+    {
+      "feature": "is_top3_grid",
+      "importance": 0.002563688923845522
+    },
+    {
+      "feature": "is_pole",
+      "importance": 0.0017375901869619628
+    },
+    {
+      "feature": "is_front_row",
+      "importance": 0.001365762797111114
+    }
+  ],
   "all_model_results": [
     {
       "model": "Baseline (Median)",
@@ -51,88 +149,32 @@
       "r2": -0.008
     },
     {
+      "model": "HistGradientBoosting",
+      "mae": 3.392,
+      "rmse": 4.435,
+      "r2": 0.408,
+      "top3_accuracy": 0.561
+    },
+    {
       "model": "Random Forest",
-      "mae": 3.429,
-      "rmse": 4.362,
-      "r2": 0.428,
-      "top3_accuracy": 0.591
+      "mae": 3.349,
+      "rmse": 4.343,
+      "r2": 0.433,
+      "top3_accuracy": 0.606
     },
     {
       "model": "Gradient Boosting",
-      "mae": 3.777,
-      "rmse": 4.685,
-      "r2": 0.34,
-      "top3_accuracy": 0.5
-    }
-  ],
-  "feature_importances": [
-    {
-      "feature": "quali_position",
-      "importance": 0.17922908153525494
+      "mae": 3.384,
+      "rmse": 4.446,
+      "r2": 0.405,
+      "top3_accuracy": 0.591
     },
     {
-      "feature": "driver_avg_finish_l10",
-      "importance": 0.1659897836640418
-    },
-    {
-      "feature": "constr_avg_finish_l5",
-      "importance": 0.1417645768526113
-    },
-    {
-      "feature": "grid_position",
-      "importance": 0.13560031586548335
-    },
-    {
-      "feature": "driver_avg_finish_l5",
-      "importance": 0.08673711408974887
-    },
-    {
-      "feature": "constr_prev_season_pts",
-      "importance": 0.05568580741070532
-    },
-    {
-      "feature": "constr_prev_season_pos",
-      "importance": 0.03785686889012518
-    },
-    {
-      "feature": "driver_prev_season_pts",
-      "importance": 0.036327113296843044
-    },
-    {
-      "feature": "season_round",
-      "importance": 0.026893298719974396
-    },
-    {
-      "feature": "circuit_avg_finish",
-      "importance": 0.026491235950789366
-    },
-    {
-      "feature": "driver_prev_season_pos",
-      "importance": 0.021276979705544822
-    },
-    {
-      "feature": "season_year",
-      "importance": 0.020743789156714453
-    },
-    {
-      "feature": "constr_prev_season_wins",
-      "importance": 0.015890448029367354
-    },
-    {
-      "feature": "circuit_appearances",
-      "importance": 0.014464295089500529
-    },
-    {
-      "feature": "driver_dnf_rate_l10",
-      "importance": 0.013516914671802924
-    },
-    {
-      "feature": "driver_prev_season_wins",
-      "importance": 0.011211927637162547
-    },
-    {
-      "feature": "circuit_podium_rate",
-      "importance": 0.01032044943432974
+      "model": "Ensemble (Voting Regressor)",
+      "mae": 3.356,
+      "rmse": 4.386,
+      "r2": 0.422,
+      "top3_accuracy": 0.576
     }
   ]
 }
