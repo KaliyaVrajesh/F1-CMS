@@ -268,11 +268,60 @@ def get_qualifying_order(circuit_id: str, year: int, round_num: int | None = Non
     return result
 
 
+def get_round_for_circuit(circuit_id: str, year: int) -> int | None:
+    """Look up round number for a circuit from the season race calendar."""
+    data = safe_get(f"{BASE_URL}/{year}.json")
+    races = data.get("MRData", {}).get("RaceTable", {}).get("Races", [])
+    for r in races:
+        if r.get("Circuit", {}).get("circuitId") == circuit_id:
+            try:
+                return int(r["round"])
+            except (ValueError, KeyError):
+                pass
+    return None
+
+
+def filter_active_drivers_per_team(drivers: list[dict]) -> list[dict]:
+    """
+    Enforce official F1 regulation that each constructor enters at most 2 cars per race.
+    If a constructor has >2 drivers in season standings (e.g. driver swaps or reserve subs),
+    we keep the top 2 active drivers with the highest points / recent championship position.
+    """
+    by_team = {}
+    for d in drivers:
+        cid = d["constructor_id"]
+        by_team.setdefault(cid, []).append(d)
+
+    active = []
+    for cid, team_drivers in by_team.items():
+        if len(team_drivers) > 2:
+            team_drivers.sort(
+                key=lambda x: (x.get("driver_prev_season_pts", 0), -x.get("driver_prev_season_pos", 20)),
+                reverse=True,
+            )
+            active.extend(team_drivers[:2])
+        else:
+            active.extend(team_drivers)
+    return active
+
+
 # ── Feature assembly ──────────────────────────────────────────────────────────
 
 def assemble_base_features(circuit_id: str, year: int, round_num: int | None = None) -> pd.DataFrame:
-    """Build pre-race base feature dataframe for all drivers."""
+    """Build pre-race base feature dataframe for all active drivers."""
+    if round_num is None:
+        round_num = get_round_for_circuit(circuit_id, year)
+
     drivers = get_driver_standings(year)
+
+    # If official qualifying exists for this round, strictly restrict to those entered drivers
+    official_q = get_qualifying_order(circuit_id, year, round_num) if round_num else {}
+    if official_q:
+        drivers = [d for d in drivers if d["driver_id"] in official_q]
+    else:
+        # Enforce maximum 2 drivers per team (excludes dropped/reserve drivers like Tsunoda)
+        drivers = filter_active_drivers_per_team(drivers)
+
     constructors = get_constructor_standings(year)
     constr_map = {c["constructor_id"]: c for c in constructors}
 
@@ -283,6 +332,7 @@ def assemble_base_features(circuit_id: str, year: int, round_num: int | None = N
     is_new_reg = 1 if year in NEW_REG_YEARS else 0
     rnd = round_num or 1
     round_weight = np.exp(-rnd / 10.0)
+
     reg_factor = 0.5 if is_new_reg else 1.0
 
     rows = []
@@ -444,6 +494,9 @@ def predict_race(
     # Priority A: explicitly supplied grid
     # Priority B: official qualifying from Jolpica
     # Priority C: run the Qualifying Model to predict starting positions
+    if round_num is None:
+        round_num = get_round_for_circuit(circuit_id, year)
+
     grid_source = "provided"
     final_grid = {}
     if qualifying_grid:
@@ -453,6 +506,10 @@ def predict_race(
         if official_q:
             final_grid = official_q
             grid_source = "official_qualifying"
+
+    # Strictly restrict to drivers who actually entered / qualified for this race
+    if final_grid and grid_source in ("official_qualifying", "provided"):
+        df = df[df["driver_id"].isin(final_grid.keys())].copy()
 
     if not final_grid:
         # Run pre-qualifying model to get estimated starting positions

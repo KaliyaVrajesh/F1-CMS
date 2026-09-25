@@ -64,7 +64,7 @@ async function getRoundForCircuit(circuitId, year) {
  * @returns {object}          - Normalised prediction response
  */
 async function predict(circuitId, year, type = 'race') {
-  const cacheKey = `mlPredict:${circuitId}:${year}:${type}`;
+  const cacheKey = `mlPredict:v3:${circuitId}:${year}:${type}`;
   const cached = predCache.get(cacheKey);
   if (cached) return cached;
 

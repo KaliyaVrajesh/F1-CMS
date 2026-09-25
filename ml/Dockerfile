@@ -7,7 +7,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code and the pre-trained model
-COPY app.py predict.py ./
+COPY app.py predict.py ensemble.py ./
 COPY model/ ./model/
 
 EXPOSE 5001
