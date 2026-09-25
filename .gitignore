@@ -1,4 +1,4 @@
-﻿# Dependencies
+# Dependencies
 node_modules/
 */node_modules/
 
@@ -41,6 +41,8 @@ __pycache__/
 venv/
 env/
 *.egg-info/
+catboost_info/
+*/catboost_info/
 
 # ML model binary tracked in git so Render can deploy without retraining
 

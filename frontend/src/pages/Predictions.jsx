@@ -50,20 +50,22 @@ const FEATURE_META = [
 
 // ── ML model stats (from actual training run) ─────────────────────────────────
 const ML_STATS = {
-  algorithm:    'Random Forest & HistGradientBoosting Ensembles',
+  algorithm:    'Hybrid CatBoost-LightGBM Ensemble + Calibrated Classifiers',
   trainSeasons: '2010 – 2023',
   testSeason:   '2024',
   trainSamples: 5513,
   testSamples:  479,
-  testMAE:      3.018,
-  testRMSE:     3.894,
-  testR2:       0.542,
-  top3Accuracy: '69.4%',
-  podiumAUC:    0.940,
-  winAUC:       0.938,
+  testMAE:      2.747,
+  testRMSE:     3.882,
+  testR2:       0.545,
+  top1Accuracy: '50.0%',
+  top3Accuracy: '68.1%',
+  top5MAE:      1.731,
+  podiumAUC:    0.947,
+  winAUC:       0.944,
   features:     20,
   baseline:     5.0,
-  improvement:  '1.98 positions better than baseline',
+  improvement:  '2.25 positions better than baseline (MAE: 2.75 pos)',
 };
 
 // ── Confidence badge ──────────────────────────────────────────────────────────

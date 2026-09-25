@@ -1,5 +1,5 @@
 {
-  "model_name": "Random Forest",
+  "model_name": "Hybrid CatBoost-LightGBM Ensemble (70% CB MAE + 20% CB RMSE + 10% LGB Huber)",
   "race_features": [
     "grid_position",
     "team_best_grid",
@@ -42,103 +42,111 @@
   "val_samples": 440,
   "test_samples": 479,
   "test_metrics": {
-    "model": "Random Forest - Test 2024",
-    "mae": 3.018,
-    "rmse": 3.894,
-    "r2": 0.542,
-    "top3_accuracy": 0.694
+    "model": "Hybrid Ensemble - Test 2024",
+    "mae": 2.747,
+    "rmse": 3.882,
+    "r2": 0.545,
+    "spearman_rho": 0.737,
+    "top1_acc": 0.5,
+    "top3_acc": 0.681,
+    "top10_acc": 0.837,
+    "top5_mae": 1.731
   },
-  "race_win_auc": 0.938,
-  "race_podium_auc": 0.94,
+  "race_win_auc": 0.9436,
+  "race_podium_auc": 0.9466,
   "quali_test_metrics": {
     "model": "Qualifying Regressor - Test 2024",
-    "mae": 3.324,
-    "rmse": 4.328,
-    "r2": 0.435,
-    "top3_accuracy": 0.486
+    "mae": 3.284,
+    "rmse": 4.363,
+    "r2": 0.426,
+    "spearman_rho": 0.654,
+    "top1_acc": 0.292,
+    "top3_acc": 0.528,
+    "top10_acc": 0.783,
+    "top5_mae": 2.264
   },
-  "quali_pole_auc": 0.901,
-  "quali_top3_auc": 0.873,
+  "quali_pole_auc": 0.9039,
+  "quali_top3_auc": 0.8747,
   "feature_importances": [
     {
-      "feature": "driver_avg_finish_l10",
-      "importance": 0.2545220615410353
-    },
-    {
       "feature": "constr_avg_finish_l5",
-      "importance": 0.1966987585378893
+      "importance": 0.15315433183789198
     },
     {
-      "feature": "grid_position",
-      "importance": 0.1319986229775561
+      "feature": "driver_avg_finish_l10",
+      "importance": 0.10850874958110489
     },
     {
       "feature": "grid_inv",
-      "importance": 0.10487913567471642
+      "importance": 0.10768642064093215
+    },
+    {
+      "feature": "grid_position",
+      "importance": 0.09677809706583829
     },
     {
       "feature": "team_best_grid",
-      "importance": 0.04879528684240038
-    },
-    {
-      "feature": "form_trend",
-      "importance": 0.039846157072470245
-    },
-    {
-      "feature": "constr_prev_pts_decayed",
-      "importance": 0.035794452407805794
+      "importance": 0.07041699355502513
     },
     {
       "feature": "driver_avg_finish_l5",
-      "importance": 0.03200383056592341
+      "importance": 0.06286699150506388
+    },
+    {
+      "feature": "form_trend",
+      "importance": 0.05309382978191165
+    },
+    {
+      "feature": "constr_prev_pts_decayed",
+      "importance": 0.05162130826280092
     },
     {
       "feature": "circuit_avg_finish",
-      "importance": 0.03184976864387411
+      "importance": 0.045626241235247326
     },
     {
       "feature": "driver_prev_pts_decayed",
-      "importance": 0.031711459954422774
-    },
-    {
-      "feature": "season_round",
-      "importance": 0.028040990261096223
-    },
-    {
-      "feature": "circuit_appearances",
-      "importance": 0.01565340093020644
-    },
-    {
-      "feature": "driver_dnf_rate_l10",
-      "importance": 0.013412781497391167
-    },
-    {
-      "feature": "grid_vs_team_best",
-      "importance": 0.013031801609952737
-    },
-    {
-      "feature": "circuit_podium_rate",
-      "importance": 0.008998517989289072
+      "importance": 0.03865631963934882
     },
     {
       "feature": "is_top6_grid",
-      "importance": 0.0042212776501304805
+      "importance": 0.03863243035285414
     },
     {
-      "feature": "is_new_reg_era",
-      "importance": 0.0028746539359215386
+      "feature": "season_round",
+      "importance": 0.037465512766996716
+    },
+    {
+      "feature": "driver_dnf_rate_l10",
+      "importance": 0.03684760600123115
+    },
+    {
+      "feature": "grid_vs_team_best",
+      "importance": 0.026292387685341683
+    },
+    {
+      "feature": "circuit_appearances",
+      "importance": 0.02279464533146269
+    },
+    {
+      "feature": "circuit_podium_rate",
+      "importance": 0.018116008011465443
     },
     {
       "feature": "is_top3_grid",
-      "importance": 0.002563688923845522
-    },
-    {
-      "feature": "is_pole",
-      "importance": 0.0017375901869619628
+      "importance": 0.010789152462739003
     },
     {
       "feature": "is_front_row",
-      "importance": 0.001365762797111114
+      "importance": 0.008988912179400992
+    },
+    {
+      "feature": "is_pole",
+      "importance": 0.006490812406185632
+    },
+    {
+      "feature": "is_new_reg_era",
+      "importance": 0.005173249697157416
     }
   ],
   "all_model_results": [
@@ -146,35 +154,78 @@
       "model": "Baseline (Median)",
       "mae": 5.0,
       "rmse": 5.788,
-      "r2": -0.008
-    },
-    {
-      "model": "HistGradientBoosting",
-      "mae": 3.392,
-      "rmse": 4.435,
-      "r2": 0.408,
-      "top3_accuracy": 0.561
+      "r2": -0.008,
+      "spearman_rho": 0.0,
+      "top1_acc": 1.0,
+      "top3_acc": 1.0,
+      "top10_acc": 1.0,
+      "top5_mae": 8.0
     },
     {
       "model": "Random Forest",
-      "mae": 3.349,
-      "rmse": 4.343,
-      "r2": 0.433,
-      "top3_accuracy": 0.606
+      "mae": 3.329,
+      "rmse": 4.329,
+      "r2": 0.436,
+      "spearman_rho": 0.651,
+      "top1_acc": 0.773,
+      "top3_acc": 0.606,
+      "top10_acc": 0.795,
+      "top5_mae": 3.323
     },
     {
-      "model": "Gradient Boosting",
-      "mae": 3.384,
-      "rmse": 4.446,
-      "r2": 0.405,
-      "top3_accuracy": 0.591
+      "model": "HistGradientBoosting",
+      "mae": 3.383,
+      "rmse": 4.421,
+      "r2": 0.412,
+      "spearman_rho": 0.635,
+      "top1_acc": 0.773,
+      "top3_acc": 0.576,
+      "top10_acc": 0.791,
+      "top5_mae": 3.269
     },
     {
-      "model": "Ensemble (Voting Regressor)",
-      "mae": 3.356,
-      "rmse": 4.386,
-      "r2": 0.422,
-      "top3_accuracy": 0.576
+      "model": "LightGBM (Huber Loss)",
+      "mae": 3.496,
+      "rmse": 4.477,
+      "r2": 0.397,
+      "spearman_rho": 0.632,
+      "top1_acc": 0.727,
+      "top3_acc": 0.606,
+      "top10_acc": 0.791,
+      "top5_mae": 3.725
+    },
+    {
+      "model": "CatBoost (RMSE Loss)",
+      "mae": 3.321,
+      "rmse": 4.368,
+      "r2": 0.426,
+      "spearman_rho": 0.646,
+      "top1_acc": 0.773,
+      "top3_acc": 0.591,
+      "top10_acc": 0.805,
+      "top5_mae": 3.192
+    },
+    {
+      "model": "CatBoost (MAE Loss)",
+      "mae": 3.129,
+      "rmse": 4.522,
+      "r2": 0.385,
+      "spearman_rho": 0.648,
+      "top1_acc": 0.727,
+      "top3_acc": 0.606,
+      "top10_acc": 0.8,
+      "top5_mae": 1.842
+    },
+    {
+      "model": "Hybrid CatBoost-LightGBM Ensemble",
+      "mae": 3.152,
+      "rmse": 4.433,
+      "r2": 0.409,
+      "spearman_rho": 0.65,
+      "top1_acc": 0.727,
+      "top3_acc": 0.591,
+      "top10_acc": 0.8,
+      "top5_mae": 2.207
     }
   ]
 }

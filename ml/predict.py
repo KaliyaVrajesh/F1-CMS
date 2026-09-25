@@ -18,6 +18,17 @@ import pandas as pd
 import joblib
 import requests
 
+# Ensure local ml directory is in sys.path for unpickling custom ensemble classes
+_DIR = os.path.dirname(os.path.abspath(__file__))
+if _DIR not in sys.path:
+    sys.path.insert(0, _DIR)
+
+try:
+    from ensemble import BlendedRegressor
+except ImportError:
+    pass
+
+
 MODEL_DIR  = os.path.join(os.path.dirname(__file__), "model")
 DATA_DIR   = os.path.join(os.path.dirname(__file__), "data")
 MODEL_PATH = os.path.join(MODEL_DIR, "f1_prediction_model.pkl")
@@ -421,7 +432,7 @@ def predict_race(
             "year":         year,
             "round":        round_num,
             "type":         "qualifying",
-            "model":        "HistGradientBoosting Regressor + Calibrated Pole Classifier",
+            "model":        bundle.get("quali_model_name", "CatBoost Blend Regressor + Calibrated Pole Classifier"),
             "generated_at": pd.Timestamp.utcnow().isoformat() + "Z",
             "predictions":  predictions,
         }
@@ -534,7 +545,7 @@ def predict_race(
         "round":        round_num,
         "type":         "race",
         "grid_source":  grid_source,
-        "model":        "Ensemble Regressor + Calibrated Gradient Boosting Classifiers",
+        "model":        bundle.get("model_name", "Hybrid CatBoost-LightGBM Ensemble"),
         "generated_at": pd.Timestamp.utcnow().isoformat() + "Z",
         "predictions":  predictions,
     }
